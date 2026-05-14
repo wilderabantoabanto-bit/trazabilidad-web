@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema de Trazabilidad</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Trazabilidad</h1>
+      <p>Sistema interno de registro y búsqueda</p>
+    </div>
+    <span class="badge">V2</span>
+  </header>
+
+  <main class="container">
+    <section class="menu">
+      <button type="button" class="menu-card active" data-view="inicio">🏠 Inicio</button>
+      <button type="button" class="menu-card" data-view="registrar">📝 Registrar</button>
+      <button type="button" class="menu-card" data-view="buscar">🔎 Buscar</button>
+    </section>
+
+    <section id="inicio" class="view active">
+      <div class="hero">
+        <h2>Bienvenido</h2>
+        <p>Desde aquí podrás registrar muestras y buscar registros por folio.</p>
+        <div class="hero-actions">
+          <button type="button" id="btnIrRegistrar">Registrar muestra</button>
+          <button type="button" class="secondary" id="btnIrBuscar">Buscar registro</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="registrar" class="view">
+      <div class="card">
+        <h2>Registrar muestra</h2>
+        <form id="formRegistro" class="grid-form" autocomplete="off">
+          <label>Folio <input name="folio" required placeholder="Ej: F0001" /></label>
+          <label>Forma <input name="forma" placeholder="Ej: Presencial / Courier" /></label>
+          <label>Responsable <input name="responsable" placeholder="Nombre del responsable" /></label>
+          <label>Tipo de muestra <input name="tipo_muestra" placeholder="Ej: Sangre, orina, etc." /></label>
+          <label>Tipo de recipiente <input name="tipo_recipiente" placeholder="Ej: Tubo tapa roja" /></label>
+          <label>Centrifugada
+            <select name="centrifugada">
+              <option value="">Seleccionar</option>
+              <option>Sí</option>
+              <option>No</option>
+              <option>No aplica</option>
+            </select>
+          </label>
+          <label>Hora centrifugación <input name="hora_centrifugacion" type="time" /></label>
+          <label>Fecha registro inicial <input name="fecha_registro_inicial" type="date" /></label>
+          <label>Sede
+            <select name="sede">
+              <option value="">Seleccionar</option>
+              <option>CIABU</option>
+              <option>BOLOGNESI</option>
+              <option>EUROPA</option>
+              <option>MANSICHE</option>
+              <option>SAN LUIS</option>
+              <option>SUGASTI</option>
+            </select>
+          </label>
+          <label>Estado
+            <select name="estado">
+              <option>ABIERTO</option>
+              <option>CERRADO</option>
+            </select>
+          </label>
+          <label class="full">Observaciones
+            <textarea name="observaciones" rows="3" placeholder="Escribe observaciones si aplica"></textarea>
+          </label>
+          <button type="submit" class="full">Guardar registro</button>
+        </form>
+        <p id="mensajeRegistro" class="message"></p>
+      </div>
+    </section>
+
+    <section id="buscar" class="view">
+      <div class="card">
+        <h2>Buscar por folio</h2>
+        <div class="search-row">
+          <input id="buscarFolio" placeholder="Escribe el folio" />
+          <button type="button" id="btnBuscar">Buscar</button>
+        </div>
+        <div id="resultadoBusqueda" class="results"></div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
