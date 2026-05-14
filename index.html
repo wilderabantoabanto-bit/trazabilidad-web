@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sistema de Trazabilidad</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -13,7 +13,7 @@
       <h1>Trazabilidad</h1>
       <p>Sistema interno de registro y búsqueda</p>
     </div>
-    <span class="badge">V2</span>
+    <span class="badge">V3</span>
   </header>
 
   <main class="container">
@@ -26,56 +26,213 @@
     <section id="inicio" class="view active">
       <div class="hero">
         <h2>Bienvenido</h2>
-        <p>Desde aquí podrás registrar muestras y buscar registros por folio.</p>
+        <p>Registra trazabilidad, preanalítica, recipientes y centrifugación.</p>
         <div class="hero-actions">
-          <button type="button" id="btnIrRegistrar">Registrar muestra</button>
+          <button type="button" id="btnIrRegistrar">Registrar trazabilidad</button>
           <button type="button" class="secondary" id="btnIrBuscar">Buscar registro</button>
         </div>
       </div>
     </section>
 
     <section id="registrar" class="view">
-      <div class="card">
-        <h2>Registrar muestra</h2>
-        <form id="formRegistro" class="grid-form" autocomplete="off">
-          <label>Folio <input name="folio" required placeholder="Ej: F0001" /></label>
-          <label>Forma <input name="forma" placeholder="Ej: Presencial / Courier" /></label>
-          <label>Responsable <input name="responsable" placeholder="Nombre del responsable" /></label>
-          <label>Tipo de muestra <input name="tipo_muestra" placeholder="Ej: Sangre, orina, etc." /></label>
-          <label>Tipo de recipiente <input name="tipo_recipiente" placeholder="Ej: Tubo tapa roja" /></label>
-          <label>Centrifugada
-            <select name="centrifugada">
-              <option value="">Seleccionar</option>
-              <option>Sí</option>
-              <option>No</option>
-              <option>No aplica</option>
-            </select>
-          </label>
-          <label>Hora centrifugación <input name="hora_centrifugacion" type="time" /></label>
-          <label>Fecha registro inicial <input name="fecha_registro_inicial" type="date" /></label>
-          <label>Sede
-            <select name="sede">
-              <option value="">Seleccionar</option>
-              <option>CIABU</option>
-              <option>BOLOGNESI</option>
-              <option>EUROPA</option>
-              <option>MANSICHE</option>
-              <option>SAN LUIS</option>
-              <option>SUGASTI</option>
-            </select>
-          </label>
-          <label>Estado
-            <select name="estado">
-              <option>ABIERTO</option>
-              <option>CERRADO</option>
-            </select>
-          </label>
-          <label class="full">Observaciones
-            <textarea name="observaciones" rows="3" placeholder="Escribe observaciones si aplica"></textarea>
-          </label>
-          <button type="submit" class="full">Guardar registro</button>
+      <div class="card register-card">
+        <div class="form-head">
+          <div>
+            <span class="pill">Checklist rápido • Registrar</span>
+            <h2>Registrar trazabilidad</h2>
+          </div>
+          <p id="mensajeRegistro" class="save-status">Sin guardar</p>
+        </div>
+
+        <form id="formRegistro" autocomplete="off">
+          <div class="section-card blue">
+            <h3>FICHA PREANALÍTICA / CLASIFICACIÓN INICIAL</h3>
+
+            <div class="grid-2">
+              <label>Origen del registro (obligatorio)
+                <select name="origen_registro" required>
+                  <option value="">-- Selecciona --</option>
+                  <option>CLIENTE PARTICULAR</option>
+                  <option>LABORATORIO ALIADO</option>
+                  <option>NO REGISTRA</option>
+                </select>
+              </label>
+
+              <label>¿Requiere ficha preanalítica? (obligatorio)
+                <select name="requiere_ficha" id="requiereFicha" required>
+                  <option value="">-- Selecciona --</option>
+                  <option>SI</option>
+                  <option>NO</option>
+                </select>
+              </label>
+            </div>
+
+            <div id="bloquePreanalitica" class="pre-block hidden">
+              <div class="question-card">
+                <h4>1. ¿Cumplió indicaciones para la toma de muestras?</h4>
+                <div class="grid-2">
+                  <label>Respuesta
+                    <select name="indicaciones_respuesta">
+                      <option value="">-- Selecciona --</option>
+                      <option>SI</option>
+                      <option>NO</option>
+                      <option>NO APLICA</option>
+                    </select>
+                  </label>
+                  <label>Detalle
+                    <input name="indicaciones_detalle" placeholder="Ej: ayuno, reposo, suspensión de medicamentos..." />
+                  </label>
+                </div>
+              </div>
+
+              <div class="question-card">
+                <h4>2. ¿Sabe Ud. por qué su médico le indicó estos análisis?</h4>
+                <div class="grid-2">
+                  <label>Respuesta
+                    <select name="motivo_respuesta">
+                      <option value="">-- Selecciona --</option>
+                      <option>SI</option>
+                      <option>NO</option>
+                      <option>NO APLICA</option>
+                    </select>
+                  </label>
+                  <label>Detalle
+                    <input name="motivo_detalle" placeholder="Ej: control general, descarte, motivo del análisis..." />
+                  </label>
+                </div>
+              </div>
+
+              <div class="question-card">
+                <h4>3. ¿Padece de alguna enfermedad crónica?</h4>
+                <label>Respuesta
+                  <select name="enfermedad_cronica" id="enfermedadCronica">
+                    <option value="">-- Selecciona --</option>
+                    <option>SI</option>
+                    <option>NO</option>
+                  </select>
+                </label>
+
+                <div id="chipsEnfermedades" class="chips hidden">
+                  <button type="button" data-chip="enfermedades" data-value="ACV (Cerebral)">ACV (Cerebral)</button>
+                  <button type="button" data-chip="enfermedades" data-value="Anemia">Anemia</button>
+                  <button type="button" data-chip="enfermedades" data-value="Artritis Reumatoide">Artritis Reumatoide</button>
+                  <button type="button" data-chip="enfermedades" data-value="Asma">Asma</button>
+                  <button type="button" data-chip="enfermedades" data-value="Convulsiones">Convulsiones</button>
+                  <button type="button" data-chip="enfermedades" data-value="Diabetes Mellitus">Diabetes Mellitus</button>
+                  <button type="button" data-chip="enfermedades" data-value="Enf. Cardíaca">Enf. Cardíaca</button>
+                  <button type="button" data-chip="enfermedades" data-value="Esteatosis/Cirrosis">Esteatosis/Cirrosis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Gastritis">Gastritis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Hipertensión Arterial">Hipertensión Arterial</button>
+                  <button type="button" data-chip="enfermedades" data-value="Insuficiencia Renal">Insuficiencia Renal</button>
+                  <button type="button" data-chip="enfermedades" data-value="Migraña">Migraña</button>
+                  <button type="button" data-chip="enfermedades" data-value="Tuberculosis">Tuberculosis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Otros">Otros +</button>
+                </div>
+              </div>
+
+              <div class="question-card">
+                <h4>4. ¿Está tomando algún medicamento actualmente?</h4>
+                <div class="grid-2">
+                  <label>Respuesta
+                    <select name="medicamentos">
+                      <option value="">-- Selecciona --</option>
+                      <option>SI</option>
+                      <option>NO</option>
+                    </select>
+                  </label>
+                  <label>Especificar
+                    <input name="medicamentos_detalle" placeholder="Ej: antibióticos, antihipertensivos..." />
+                  </label>
+                </div>
+              </div>
+
+              <div class="question-card">
+                <h4>5. Detalles adicionales</h4>
+                <div class="chips">
+                  <button type="button" data-chip="detalles_adicionales" data-value="Cirugía últimas 2 semanas">Cirugía últimas 2 semanas</button>
+                  <button type="button" data-chip="detalles_adicionales" data-value="Gestante">Gestante</button>
+                  <button type="button" data-chip="detalles_adicionales" data-value="Ninguno">Ninguno</button>
+                  <button type="button" data-chip="detalles_adicionales" data-value="Otros">Otros +</button>
+                </div>
+                <label>Especifica “Otros”
+                  <input name="detalles_otros" placeholder="Ej: ayuno incompleto, procedimiento reciente, etc." />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h3>DATOS DE TRAZABILIDAD</h3>
+
+            <div class="grid-4">
+              <label>Folio (obligatorio)
+                <input name="folio" required placeholder="Escanea / pega folio..." maxlength="12" />
+              </label>
+
+              <label>Hora toma (obligatorio)
+                <input name="hora_centrifugacion" type="time" required />
+              </label>
+
+              <label>Sede
+                <select name="sede" id="sede">
+                  <option value="">-- Selecciona --</option>
+                  <option>CIABU</option>
+                  <option>BOLOGNESI</option>
+                  <option>EUROPA</option>
+                  <option>MANSICHE</option>
+                  <option>SAN LUIS</option>
+                  <option>SUGASTI</option>
+                </select>
+              </label>
+
+              <label>Responsable (obligatorio)
+                <input name="responsable" required placeholder="Nombre del responsable" />
+              </label>
+            </div>
+
+            <h4>Tipo de muestra</h4>
+            <div class="chips">
+              <button type="button" data-chip="tipos_muestra" data-value="S. Venosa">S. Venosa</button>
+              <button type="button" data-chip="tipos_muestra" data-value="S. Arterial">S. Arterial</button>
+              <button type="button" data-chip="tipos_muestra" data-value="S. Capilar">S. Capilar</button>
+              <button type="button" data-chip="tipos_muestra" data-value="M. Orina">M. Orina</button>
+              <button type="button" data-chip="tipos_muestra" data-value="M. Heces">M. Heces</button>
+              <button type="button" data-chip="tipos_muestra" data-value="Otros">Otros +</button>
+            </div>
+
+            <h4>Recipientes</h4>
+            <div class="chips">
+              <button type="button" data-chip="recipientes" data-value="T. Rojo">T. Rojo</button>
+              <button type="button" data-chip="recipientes" data-value="T. Amarillo">T. Amarillo</button>
+              <button type="button" data-chip="recipientes" data-value="T. Lila">T. Lila</button>
+              <button type="button" data-chip="recipientes" data-value="T. Celeste">T. Celeste</button>
+              <button type="button" data-chip="recipientes" data-value="T. Verde">T. Verde</button>
+              <button type="button" data-chip="recipientes" data-value="Fr. Orina">Fr. Orina</button>
+              <button type="button" data-chip="recipientes" data-value="Fr. Heces">Fr. Heces</button>
+              <button type="button" data-chip="recipientes" data-value="Otros">Otros +</button>
+            </div>
+
+            <h4>Centrifugación (por recipiente)</h4>
+            <div id="tablaCentrifugacion" class="centrifuga-box">
+              Selecciona recipientes arriba para generar la tabla.
+            </div>
+
+            <label>Observaciones
+              <textarea name="observaciones" rows="3" placeholder="Escribe observaciones si aplica"></textarea>
+            </label>
+
+            <input type="hidden" name="tipos_muestra" id="tipos_muestra" />
+            <input type="hidden" name="recipientes" id="recipientes" />
+            <input type="hidden" name="enfermedades" id="enfermedades" />
+            <input type="hidden" name="detalles_adicionales" id="detalles_adicionales" />
+            <input type="hidden" name="centrifugacion" id="centrifugacion" />
+          </div>
+
+          <div class="actions">
+            <button type="button" class="secondary" id="btnLimpiar">Limpiar</button>
+            <button type="submit">Guardar final</button>
+          </div>
         </form>
-        <p id="mensajeRegistro" class="message"></p>
       </div>
     </section>
 
@@ -90,6 +247,7 @@
       </div>
     </section>
   </main>
-  <script src="app.js"></script>
+
+  <script src="./app.js"></script>
 </body>
 </html>
