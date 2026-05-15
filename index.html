@@ -13,7 +13,7 @@
       <h1>Trazabilidad</h1>
       <p>Sistema interno de registro, búsqueda y seguimiento de muestras</p>
     </div>
-    <span class="badge">V3.2</span>
+    <span class="badge">V3.3</span>
   </header>
 
   <main class="container">
@@ -21,13 +21,14 @@
       <button type="button" class="menu-card active" data-view="inicio">🏠 Inicio</button>
       <button type="button" class="menu-card" data-view="registrar">📝 Registrar</button>
       <button type="button" class="menu-card" data-view="buscar">🔎 Buscar</button>
+      <button type="button" class="menu-card" data-view="historial">📋 Historial</button>
     </section>
 
     <section id="inicio" class="view active">
       <div class="hero">
         <span class="pill">Laboratorio clínico • Trazabilidad</span>
         <h2>Bienvenido</h2>
-        <p>Registra, continúa y controla el recorrido de cada muestra desde la toma hasta el cierre del folio.</p>
+        <p>Registra, continúa, consulta y controla el recorrido de cada muestra desde la toma hasta el cierre del folio.</p>
 
         <div class="hero-summary">
           <div>
@@ -55,6 +56,7 @@
         <div class="hero-actions">
           <button type="button" id="btnIrRegistrar">Registrar trazabilidad</button>
           <button type="button" class="secondary" id="btnIrBuscar">Buscar registro</button>
+          <button type="button" class="secondary" id="btnIrHistorial">Ver historial</button>
         </div>
       </div>
     </section>
@@ -327,6 +329,75 @@
         </div>
 
         <div id="resultadoBusqueda" class="results"></div>
+      </div>
+    </section>
+
+    <section id="historial" class="view">
+      <div class="card">
+        <div class="form-head">
+          <div>
+            <span class="pill">Historial inteligente</span>
+            <h2>Historial general de folios</h2>
+            <p class="muted">Carga por páginas para no saturar el sistema.</p>
+          </div>
+
+          <button type="button" id="btnHistorialActualizar">Actualizar</button>
+        </div>
+
+        <div class="history-filters">
+          <label>Buscar folio
+            <input id="historialFolio" placeholder="Folio exacto o parcial" />
+          </label>
+
+          <label>Estado
+            <select id="historialEstado">
+              <option value="">Todos</option>
+              <option>ABIERTO</option>
+              <option>EN PROCESO</option>
+              <option>CERRADO</option>
+              <option>ANULADO</option>
+            </select>
+          </label>
+
+          <label>Sede
+            <select id="historialSede">
+              <option value="">Todas</option>
+              <option>CIABU</option>
+              <option>BOLOGNESI</option>
+              <option>EUROPA</option>
+              <option>MANSICHE</option>
+              <option>SAN LUIS</option>
+              <option>SUGASTI</option>
+            </select>
+          </label>
+
+          <label>Desde
+            <input id="historialDesde" type="date" />
+          </label>
+
+          <label>Hasta
+            <input id="historialHasta" type="date" />
+          </label>
+
+          <div class="history-filter-actions">
+            <button type="button" id="btnHistorialBuscar">Buscar</button>
+            <button type="button" class="secondary" id="btnHistorialLimpiar">Limpiar filtros</button>
+          </div>
+        </div>
+
+        <div class="history-meta">
+          <span id="historialInfo">Listo para cargar historial.</span>
+          <span id="historialPagina">Página 1</span>
+        </div>
+
+        <div id="historialResultados" class="history-results">
+          <p class="muted">Usa los filtros o presiona actualizar para ver los folios recientes.</p>
+        </div>
+
+        <div class="history-pagination">
+          <button type="button" class="secondary" id="btnHistorialAnterior">Anterior</button>
+          <button type="button" id="btnHistorialSiguiente">Siguiente</button>
+        </div>
       </div>
     </section>
   </main>

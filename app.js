@@ -4,6 +4,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_QRC-82FH-YC2znJDSicb3Q_u82tcaHP";
 const TIEMPO_AUTOGUARDADO_MS = 1200;
 const MIN_FOLIO_AUTOGUARDADO = 6;
 const MINUTOS_CENTRIFUGACION = 10;
+const HISTORIAL_PAGE_SIZE = 25;
 
 const AREAS_DESTINO = [
   "BIOQUÍMICA",
@@ -22,6 +23,9 @@ let autosaveTimerAvance = null;
 let hashUltimoRegistroGuardado = "";
 let guardadoFinalEnProceso = false;
 let avanceEnProceso = false;
+let historialPaginaActual = 0;
+let historialTotal = 0;
+let historialCargadoPrimeraVez = false;
 
 const selected = {
   enfermedades: [],
@@ -38,22 +42,34 @@ window.addEventListener("DOMContentLoaded", () => {
   instalarEstilosHojaTrazabilidad();
 
   document.querySelectorAll(".menu-card").forEach(button => {
-    button.addEventListener("click", () => showView(button.dataset.view));
+    button.addEventListener("click", () => {
+      showView(button.dataset.view);
+      if (button.dataset.view === "historial" && !historialCargadoPrimeraVez) {
+        cargarHistorial(true);
+      }
+    });
   });
 
-  document.getElementById("btnIrRegistrar").addEventListener("click", () => showView("registrar"));
-  document.getElementById("btnIrBuscar").addEventListener("click", () => showView("buscar"));
-  document.getElementById("btnBuscar").addEventListener("click", buscarRegistro);
-  document.getElementById("btnLimpiar").addEventListener("click", limpiarFormulario);
-  document.getElementById("formRegistro").addEventListener("submit", guardarRegistro);
+  document.getElementById("btnIrRegistrar")?.addEventListener("click", () => showView("registrar"));
+  document.getElementById("btnIrBuscar")?.addEventListener("click", () => showView("buscar"));
+  document.getElementById("btnIrHistorial")?.addEventListener("click", () => {
+    showView("historial");
+    if (!historialCargadoPrimeraVez) cargarHistorial(true);
+  });
+
+  document.getElementById("btnBuscar")?.addEventListener("click", buscarRegistro);
+  document.getElementById("btnLimpiar")?.addEventListener("click", limpiarFormulario);
+  document.getElementById("formRegistro")?.addEventListener("submit", guardarRegistro);
 
   const formRegistro = document.getElementById("formRegistro");
-  formRegistro.addEventListener("input", programarAutoGuardadoRegistro);
-  formRegistro.addEventListener("change", programarAutoGuardadoRegistro);
+  if (formRegistro) {
+    formRegistro.addEventListener("input", programarAutoGuardadoRegistro);
+    formRegistro.addEventListener("change", programarAutoGuardadoRegistro);
+  }
 
-  document.getElementById("requiereFicha").addEventListener("change", manejarFicha);
-  document.getElementById("enfermedadCronica").addEventListener("change", manejarEnfermedad);
-  document.getElementById("origenRegistro").addEventListener("change", manejarOrigen);
+  document.getElementById("requiereFicha")?.addEventListener("change", manejarFicha);
+  document.getElementById("enfermedadCronica")?.addEventListener("change", manejarEnfermedad);
+  document.getElementById("origenRegistro")?.addEventListener("change", manejarOrigen);
 
   const inputFolio = document.getElementById("inputFolio");
   if (inputFolio) {
@@ -93,6 +109,7 @@ window.addEventListener("DOMContentLoaded", () => {
     programarAutoGuardadoRegistro();
   });
 
+  configurarHistorial();
   actualizarPanelFolio();
 });
 
@@ -100,7 +117,7 @@ function showView(viewId) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.querySelectorAll(".menu-card").forEach(b => b.classList.remove("active"));
 
-  document.getElementById(viewId).classList.add("active");
+  document.getElementById(viewId)?.classList.add("active");
 
   const btn = document.querySelector(`[data-view="${viewId}"]`);
   if (btn) btn.classList.add("active");
@@ -142,18 +159,18 @@ function marcarGuardadoCorrecto(estadoTexto = "ABIERTO") {
 }
 
 function manejarFicha() {
-  const valor = document.getElementById("requiereFicha").value;
-  document.getElementById("bloquePreanalitica").classList.toggle("hidden", valor !== "SI");
+  const valor = document.getElementById("requiereFicha")?.value;
+  document.getElementById("bloquePreanalitica")?.classList.toggle("hidden", valor !== "SI");
 }
 
 function manejarEnfermedad() {
-  const valor = document.getElementById("enfermedadCronica").value;
-  document.getElementById("chipsEnfermedades").classList.toggle("hidden", valor !== "SI");
+  const valor = document.getElementById("enfermedadCronica")?.value;
+  document.getElementById("chipsEnfermedades")?.classList.toggle("hidden", valor !== "SI");
 }
 
 function manejarOrigen() {
-  const valor = document.getElementById("origenRegistro").value;
-  document.getElementById("origenOtrosBox").classList.toggle("hidden", valor !== "OTROS");
+  const valor = document.getElementById("origenRegistro")?.value;
+  document.getElementById("origenOtrosBox")?.classList.toggle("hidden", valor !== "OTROS");
 }
 
 function toggleChip(btn) {
@@ -181,10 +198,10 @@ function toggleChip(btn) {
 }
 
 function manejarCajasOtros() {
-  document.getElementById("enfermedadOtrosBox").classList.toggle("hidden", !selected.enfermedades.includes("Otros"));
-  document.getElementById("detallesOtrosBox").classList.toggle("hidden", !selected.detalles_adicionales.includes("Otros"));
-  document.getElementById("muestraOtrosBox").classList.toggle("hidden", !selected.tipos_muestra.includes("Otros"));
-  document.getElementById("recipienteOtrosBox").classList.toggle("hidden", !selected.recipientes.includes("Otros"));
+  document.getElementById("enfermedadOtrosBox")?.classList.toggle("hidden", !selected.enfermedades.includes("Otros"));
+  document.getElementById("detallesOtrosBox")?.classList.toggle("hidden", !selected.detalles_adicionales.includes("Otros"));
+  document.getElementById("muestraOtrosBox")?.classList.toggle("hidden", !selected.tipos_muestra.includes("Otros"));
+  document.getElementById("recipienteOtrosBox")?.classList.toggle("hidden", !selected.recipientes.includes("Otros"));
 
   renderCentrifugacion();
 }
@@ -219,14 +236,21 @@ function getRecipientesFinales() {
 }
 
 function actualizarOcultos() {
-  document.getElementById("tipos_muestra").value = JSON.stringify(getTiposMuestraFinales());
-  document.getElementById("recipientes").value = JSON.stringify(getRecipientesFinales());
-  document.getElementById("enfermedades").value = JSON.stringify(selected.enfermedades);
-  document.getElementById("detalles_adicionales").value = JSON.stringify(selected.detalles_adicionales);
+  const tipos = document.getElementById("tipos_muestra");
+  const recipientes = document.getElementById("recipientes");
+  const enfermedades = document.getElementById("enfermedades");
+  const detalles = document.getElementById("detalles_adicionales");
+
+  if (tipos) tipos.value = JSON.stringify(getTiposMuestraFinales());
+  if (recipientes) recipientes.value = JSON.stringify(getRecipientesFinales());
+  if (enfermedades) enfermedades.value = JSON.stringify(selected.enfermedades);
+  if (detalles) detalles.value = JSON.stringify(selected.detalles_adicionales);
 }
 
 function renderCentrifugacion() {
   const box = document.getElementById("tablaCentrifugacion");
+  if (!box) return;
+
   const recipientesFinales = getRecipientesFinales();
 
   if (recipientesFinales.length === 0) {
@@ -355,6 +379,8 @@ async function realizarAutoGuardadoRegistro() {
 
   const form = document.getElementById("formRegistro");
   const mensaje = document.getElementById("mensajeRegistro");
+  if (!form || !mensaje) return;
+
   const data = prepararDataRegistro(form);
 
   if (!data.folio || data.folio.length < MIN_FOLIO_AUTOGUARDADO) return;
@@ -461,7 +487,7 @@ async function guardarRegistro(e) {
 
 function limpiarFormulario() {
   clearTimeout(autosaveTimerRegistro);
-  document.getElementById("formRegistro").reset();
+  document.getElementById("formRegistro")?.reset();
 
   selected.enfermedades = [];
   selected.detalles_adicionales = [];
@@ -474,20 +500,23 @@ function limpiarFormulario() {
 
   document.querySelectorAll(".chips button").forEach(btn => btn.classList.remove("selected"));
 
-  document.getElementById("bloquePreanalitica").classList.add("hidden");
-  document.getElementById("chipsEnfermedades").classList.add("hidden");
-  document.getElementById("origenOtrosBox").classList.add("hidden");
-  document.getElementById("enfermedadOtrosBox").classList.add("hidden");
-  document.getElementById("detallesOtrosBox").classList.add("hidden");
-  document.getElementById("muestraOtrosBox").classList.add("hidden");
-  document.getElementById("recipienteOtrosBox").classList.add("hidden");
+  document.getElementById("bloquePreanalitica")?.classList.add("hidden");
+  document.getElementById("chipsEnfermedades")?.classList.add("hidden");
+  document.getElementById("origenOtrosBox")?.classList.add("hidden");
+  document.getElementById("enfermedadOtrosBox")?.classList.add("hidden");
+  document.getElementById("detallesOtrosBox")?.classList.add("hidden");
+  document.getElementById("muestraOtrosBox")?.classList.add("hidden");
+  document.getElementById("recipienteOtrosBox")?.classList.add("hidden");
 
   actualizarOcultos();
   renderCentrifugacion();
   actualizarPanelFolio("Registro inicial");
 
-  document.getElementById("mensajeRegistro").textContent = "Sin guardar";
-  document.getElementById("mensajeRegistro").style.color = "#64748b";
+  const mensaje = document.getElementById("mensajeRegistro");
+  if (mensaje) {
+    mensaje.textContent = "Sin guardar";
+    mensaje.style.color = "#64748b";
+  }
 }
 
 async function buscarRegistro() {
@@ -686,7 +715,7 @@ function crearModalContinuar() {
 function cargarModalContinuar(reg) {
   clearTimeout(autosaveTimerAvance);
 
-  document.getElementById("modalContinuar").classList.remove("hidden");
+  document.getElementById("modalContinuar")?.classList.remove("hidden");
   document.getElementById("continuarPill").textContent = "Continuar • Folio: " + reg.folio;
 
   document.getElementById("horaIngresoControl").value = reg.hora_ingreso_control || "";
@@ -704,13 +733,15 @@ function cargarModalContinuar(reg) {
 
 function cerrarModalContinuar() {
   clearTimeout(autosaveTimerAvance);
-  document.getElementById("modalContinuar").classList.add("hidden");
+  document.getElementById("modalContinuar")?.classList.add("hidden");
 }
 
 function renderTablaControl(reg) {
   const recipientes = reg.recipientes || [];
   const guardado = reg.centrifugacion_control || [];
   const box = document.getElementById("tablaControl");
+
+  if (!box) return;
 
   if (recipientes.length === 0) {
     box.innerHTML = "Este folio no tiene recipientes registrados.";
@@ -809,6 +840,8 @@ function renderTablaEntrega(reg) {
   const responsableGeneral = reg.responsable_entrega || "";
   const box = document.getElementById("tablaEntrega");
 
+  if (!box) return;
+
   if (recipientes.length === 0) {
     box.innerHTML = "Este folio no tiene recipientes registrados.";
     return;
@@ -884,7 +917,7 @@ function sincronizarResponsableEntrega() {
 }
 
 function obtenerControl() {
-  const recipientes = registroActual.recipientes || [];
+  const recipientes = registroActual?.recipientes || [];
 
   return recipientes.map((rec, index) => {
     const campos = document.querySelectorAll(`[data-control="${index}"]`);
@@ -899,7 +932,7 @@ function obtenerControl() {
 }
 
 function obtenerEntrega() {
-  const recipientes = registroActual.recipientes || [];
+  const recipientes = registroActual?.recipientes || [];
 
   return recipientes.map((rec, index) => {
     const chipsSeleccionados = document.querySelectorAll(`.area-chip[data-entrega="${index}"].selected`);
@@ -945,15 +978,15 @@ async function guardarAvance(silencioso = false) {
     mensaje.style.color = "#172033";
   }
 
-  const responsableEntregaGeneral = document.getElementById("responsableEntrega").value || null;
+  const responsableEntregaGeneral = document.getElementById("responsableEntrega")?.value || null;
 
   const payload = {
-    hora_ingreso_control: document.getElementById("horaIngresoControl").value || null,
-    responsable_ingreso: document.getElementById("responsableIngreso").value || null,
+    hora_ingreso_control: document.getElementById("horaIngresoControl")?.value || null,
+    responsable_ingreso: document.getElementById("responsableIngreso")?.value || null,
     responsable_entrega: responsableEntregaGeneral,
     centrifugacion_control: obtenerControl(),
     entrega_area: obtenerEntrega(),
-    observaciones_finales: document.getElementById("observacionesFinales").value || null,
+    observaciones_finales: document.getElementById("observacionesFinales")?.value || null,
     estado: "EN PROCESO",
     updated_at: new Date().toISOString()
   };
@@ -1026,6 +1059,265 @@ async function cerrarFolio() {
 
   alert("Folio cerrado correctamente.");
   cerrarModalContinuar();
+  if (document.getElementById("historial")?.classList.contains("active")) cargarHistorial(false);
+}
+
+function configurarHistorial() {
+  document.getElementById("btnHistorialActualizar")?.addEventListener("click", () => cargarHistorial(true));
+  document.getElementById("btnHistorialBuscar")?.addEventListener("click", () => cargarHistorial(true));
+  document.getElementById("btnHistorialLimpiar")?.addEventListener("click", limpiarFiltrosHistorial);
+  document.getElementById("btnHistorialAnterior")?.addEventListener("click", historialAnterior);
+  document.getElementById("btnHistorialSiguiente")?.addEventListener("click", historialSiguiente);
+
+  ["historialFolio", "historialEstado", "historialSede", "historialDesde", "historialHasta"].forEach(id => {
+    const elemento = document.getElementById(id);
+    if (!elemento) return;
+
+    elemento.addEventListener("keydown", evento => {
+      if (evento.key === "Enter") cargarHistorial(true);
+    });
+  });
+}
+
+function obtenerFiltrosHistorial() {
+  return {
+    folio: document.getElementById("historialFolio")?.value.trim() || "",
+    estado: document.getElementById("historialEstado")?.value || "",
+    sede: document.getElementById("historialSede")?.value || "",
+    desde: document.getElementById("historialDesde")?.value || "",
+    hasta: document.getElementById("historialHasta")?.value || ""
+  };
+}
+
+async function cargarHistorial(resetearPagina = false) {
+  const contenedor = document.getElementById("historialResultados");
+  const info = document.getElementById("historialInfo");
+  const pagina = document.getElementById("historialPagina");
+
+  if (!contenedor) return;
+
+  historialCargadoPrimeraVez = true;
+
+  if (resetearPagina) historialPaginaActual = 0;
+
+  const filtros = obtenerFiltrosHistorial();
+  const desdeIndice = historialPaginaActual * HISTORIAL_PAGE_SIZE;
+  const hastaIndice = desdeIndice + HISTORIAL_PAGE_SIZE - 1;
+
+  contenedor.innerHTML = `<p class="muted">Cargando historial...</p>`;
+  if (info) info.textContent = "Consultando Supabase...";
+  if (pagina) pagina.textContent = `Página ${historialPaginaActual + 1}`;
+  actualizarBotonesHistorial(true);
+
+  let consulta = supabaseClient
+    .from("trazabilidad")
+    .select("folio, estado, sede, responsable, tipos_muestra, recipientes, created_at, updated_at", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(desdeIndice, hastaIndice);
+
+  if (filtros.folio) {
+    consulta = consulta.ilike("folio", `%${filtros.folio}%`);
+  }
+
+  if (filtros.estado) {
+    consulta = consulta.eq("estado", filtros.estado);
+  }
+
+  if (filtros.sede) {
+    consulta = consulta.eq("sede", filtros.sede);
+  }
+
+  if (filtros.desde) {
+    consulta = consulta.gte("created_at", `${filtros.desde}T00:00:00`);
+  }
+
+  if (filtros.hasta) {
+    consulta = consulta.lte("created_at", `${filtros.hasta}T23:59:59`);
+  }
+
+  const { data, error, count } = await consulta;
+
+  if (error) {
+    contenedor.innerHTML = `<div class="errorbox">Error al cargar historial: ${limpiarHTML(error.message)}</div>`;
+    if (info) info.textContent = "No se pudo cargar el historial.";
+    actualizarBotonesHistorial(false);
+    return;
+  }
+
+  historialTotal = count || 0;
+  renderHistorial(data || []);
+  actualizarMetaHistorial(data || []);
+  actualizarBotonesHistorial(false);
+}
+
+function renderHistorial(registros) {
+  const contenedor = document.getElementById("historialResultados");
+  if (!contenedor) return;
+
+  if (!registros.length) {
+    contenedor.innerHTML = `<p class="muted">No se encontraron folios con esos filtros.</p>`;
+    return;
+  }
+
+  contenedor.innerHTML = `
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Folio</th>
+            <th>Estado</th>
+            <th>Sede</th>
+            <th>Responsable</th>
+            <th>Muestras</th>
+            <th>Recipientes</th>
+            <th>Creado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${registros.map(reg => `
+            <tr>
+              <td><strong>${limpiarHTML(reg.folio || "-")}</strong></td>
+              <td><span class="state-badge ${claseEstado(reg.estado)}">${limpiarHTML(reg.estado || "SIN ESTADO")}</span></td>
+              <td>${limpiarHTML(reg.sede || "-")}</td>
+              <td>${limpiarHTML(reg.responsable || "-")}</td>
+              <td>${limpiarHTML(listaTexto(reg.tipos_muestra))}</td>
+              <td>${limpiarHTML(listaTexto(reg.recipientes))}</td>
+              <td>${formatearFechaCorta(reg.created_at)}</td>
+              <td>
+                <div class="history-actions">
+                  <button type="button" onclick="copiarFolio('${limpiarAtributo(reg.folio || "")}')">Copiar</button>
+                  <button type="button" onclick="abrirContinuarPorFolio('${limpiarAtributo(reg.folio || "")}')">Continuar</button>
+                  <button type="button" onclick="verHojaTrazabilidadPorFolio('${limpiarAtributo(reg.folio || "")}')">Hoja/PDF</button>
+                  <button type="button" class="warning-btn" onclick="anularFolio('${limpiarAtributo(reg.folio || "")}')">Anular</button>
+                  <button type="button" class="danger-btn" onclick="eliminarFolioDefinitivo('${limpiarAtributo(reg.folio || "")}')">Eliminar</button>
+                </div>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function actualizarMetaHistorial(registrosPagina) {
+  const info = document.getElementById("historialInfo");
+  const pagina = document.getElementById("historialPagina");
+
+  const inicio = historialTotal === 0 ? 0 : historialPaginaActual * HISTORIAL_PAGE_SIZE + 1;
+  const fin = Math.min((historialPaginaActual + 1) * HISTORIAL_PAGE_SIZE, historialTotal);
+  const totalPaginas = Math.max(1, Math.ceil(historialTotal / HISTORIAL_PAGE_SIZE));
+
+  if (info) {
+    info.textContent = historialTotal
+      ? `Mostrando ${inicio} - ${fin} de ${historialTotal} folios filtrados.`
+      : "No hay folios para mostrar.";
+  }
+
+  if (pagina) {
+    pagina.textContent = `Página ${historialPaginaActual + 1} de ${totalPaginas}`;
+  }
+}
+
+function actualizarBotonesHistorial(cargando) {
+  const anterior = document.getElementById("btnHistorialAnterior");
+  const siguiente = document.getElementById("btnHistorialSiguiente");
+
+  const totalPaginas = Math.max(1, Math.ceil(historialTotal / HISTORIAL_PAGE_SIZE));
+
+  if (anterior) anterior.disabled = cargando || historialPaginaActual <= 0;
+  if (siguiente) siguiente.disabled = cargando || historialPaginaActual >= totalPaginas - 1 || historialTotal === 0;
+}
+
+function historialAnterior() {
+  if (historialPaginaActual <= 0) return;
+  historialPaginaActual -= 1;
+  cargarHistorial(false);
+}
+
+function historialSiguiente() {
+  const totalPaginas = Math.max(1, Math.ceil(historialTotal / HISTORIAL_PAGE_SIZE));
+  if (historialPaginaActual >= totalPaginas - 1) return;
+  historialPaginaActual += 1;
+  cargarHistorial(false);
+}
+
+function limpiarFiltrosHistorial() {
+  const ids = ["historialFolio", "historialEstado", "historialSede", "historialDesde", "historialHasta"];
+  ids.forEach(id => {
+    const elemento = document.getElementById(id);
+    if (elemento) elemento.value = "";
+  });
+
+  cargarHistorial(true);
+}
+
+async function anularFolio(folio) {
+  if (!folio) return;
+
+  const confirmar = confirm(`¿Seguro que deseas ANULAR el folio ${folio}?`);
+  if (!confirmar) return;
+
+  const motivo = prompt("Motivo de anulación (opcional):") || "";
+
+  const { data: regActual } = await supabaseClient
+    .from("trazabilidad")
+    .select("observaciones_finales")
+    .eq("folio", folio)
+    .maybeSingle();
+
+  const observacionAnterior = regActual?.observaciones_finales || "";
+  const notaAnulacion = `ANULACIÓN: ${motivo || "Sin motivo especificado"} - ${new Date().toLocaleString("es-PE")}`;
+
+  const payload = {
+    estado: "ANULADO",
+    observaciones_finales: observacionAnterior
+      ? `${observacionAnterior}
+
+${notaAnulacion}`
+      : notaAnulacion,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabaseClient
+    .from("trazabilidad")
+    .update(payload)
+    .eq("folio", folio);
+
+  if (error) {
+    alert("No se pudo anular el folio: " + error.message);
+    return;
+  }
+
+  mostrarAvisoTemporal("Folio anulado: " + folio);
+  cargarHistorial(false);
+}
+
+async function eliminarFolioDefinitivo(folio) {
+  if (!folio) return;
+
+  const primeraConfirmacion = confirm(`¿Seguro que deseas ELIMINAR DEFINITIVAMENTE el folio ${folio}? Esta acción no se puede deshacer.`);
+  if (!primeraConfirmacion) return;
+
+  const segundaConfirmacion = prompt(`Escribe ELIMINAR para confirmar el borrado definitivo del folio ${folio}.`);
+  if (segundaConfirmacion !== "ELIMINAR") {
+    alert("Eliminación cancelada.");
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("trazabilidad")
+    .delete()
+    .eq("folio", folio);
+
+  if (error) {
+    alert("No se pudo eliminar el folio. Si aparece error de RLS, falta activar política DELETE en Supabase. Detalle: " + error.message);
+    return;
+  }
+
+  mostrarAvisoTemporal("Folio eliminado definitivamente: " + folio);
+  cargarHistorial(true);
 }
 
 function crearModalHojaTrazabilidad() {
@@ -1084,7 +1376,7 @@ async function verHojaTrazabilidadPorFolio(folio) {
 }
 
 function cerrarHojaTrazabilidad() {
-  document.getElementById("modalHojaTrazabilidad").classList.add("hidden");
+  document.getElementById("modalHojaTrazabilidad")?.classList.add("hidden");
 }
 
 function imprimirHojaTrazabilidad() {
@@ -1326,6 +1618,11 @@ function instalarEstilosHojaTrazabilidad() {
       color:#334155;
     }
 
+    .hoja-estado.cancelled{
+      background:#ffe5e5;
+      color:#b10000;
+    }
+
     .hoja-resumen{
       display:grid;
       grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
@@ -1513,6 +1810,7 @@ function claseEstado(estado) {
   if (limpio === "CERRADO") return "closed";
   if (limpio === "EN PROCESO") return "process";
   if (limpio === "ABIERTO") return "open";
+  if (limpio === "ANULADO") return "cancelled";
 
   return "unknown";
 }
@@ -1522,6 +1820,22 @@ function formatearFecha(valor) {
 
   try {
     return new Date(valor).toLocaleString("es-PE");
+  } catch (error) {
+    return valor;
+  }
+}
+
+function formatearFechaCorta(valor) {
+  if (!valor) return "-";
+
+  try {
+    return new Date(valor).toLocaleString("es-PE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
   } catch (error) {
     return valor;
   }
