@@ -11,9 +11,9 @@
   <header class="topbar">
     <div>
       <h1>Trazabilidad</h1>
-      <p>Sistema interno de registro y búsqueda</p>
+      <p>Sistema interno de registro, búsqueda y seguimiento de muestras</p>
     </div>
-    <span class="badge">V3.1</span>
+    <span class="badge">V3.2</span>
   </header>
 
   <main class="container">
@@ -25,8 +25,33 @@
 
     <section id="inicio" class="view active">
       <div class="hero">
+        <span class="pill">Laboratorio clínico • Trazabilidad</span>
         <h2>Bienvenido</h2>
-        <p>Registra trazabilidad, preanalítica, recipientes y centrifugación.</p>
+        <p>Registra, continúa y controla el recorrido de cada muestra desde la toma hasta el cierre del folio.</p>
+
+        <div class="hero-summary">
+          <div>
+            <strong>1</strong>
+            <span>Registro inicial</span>
+          </div>
+          <div>
+            <strong>2</strong>
+            <span>Ingreso a control</span>
+          </div>
+          <div>
+            <strong>3</strong>
+            <span>Centrifugación</span>
+          </div>
+          <div>
+            <strong>4</strong>
+            <span>Entrega al área</span>
+          </div>
+          <div>
+            <strong>5</strong>
+            <span>Cierre del folio</span>
+          </div>
+        </div>
+
         <div class="hero-actions">
           <button type="button" id="btnIrRegistrar">Registrar trazabilidad</button>
           <button type="button" class="secondary" id="btnIrBuscar">Buscar registro</button>
@@ -42,6 +67,27 @@
             <h2>Registrar trazabilidad</h2>
           </div>
           <p id="mensajeRegistro" class="save-status">Sin guardar</p>
+        </div>
+
+        <div class="folio-panel">
+          <div>
+            <span class="folio-label">Folio actual</span>
+            <strong id="folioActualTexto">Sin folio todavía</strong>
+          </div>
+
+          <div>
+            <span class="folio-label">Estado</span>
+            <strong id="estadoActualTexto">Registro inicial</strong>
+          </div>
+
+          <div>
+            <span class="folio-label">Último guardado</span>
+            <strong id="ultimoGuardadoTexto">Pendiente</strong>
+          </div>
+
+          <button type="button" class="secondary" id="btnCopiarFolioActual" disabled>
+            Copiar folio
+          </button>
         </div>
 
         <form id="formRegistro" autocomplete="off">
@@ -117,30 +163,31 @@
                   </select>
                 </label>
 
-<div id="chipsEnfermedades" class="chips hidden">
-  <button type="button" data-chip="enfermedades" data-value="ACV (Cerebral)">ACV (Cerebral)</button>
-  <button type="button" data-chip="enfermedades" data-value="Anemia">Anemia</button>
-  <button type="button" data-chip="enfermedades" data-value="Artritis Reumatoide">Artritis Reumatoide</button>
-  <button type="button" data-chip="enfermedades" data-value="Asma">Asma</button>
-  <button type="button" data-chip="enfermedades" data-value="Convulsiones">Convulsiones</button>
-  <button type="button" data-chip="enfermedades" data-value="Diabetes Mellitus">Diabetes Mellitus</button>
-  <button type="button" data-chip="enfermedades" data-value="Enf. Cardíaca">Enf. Cardíaca</button>
-  <button type="button" data-chip="enfermedades" data-value="Esteatosis/Cirrosis">Esteatosis/Cirrosis</button>
-  <button type="button" data-chip="enfermedades" data-value="Gastritis">Gastritis</button>
-  <button type="button" data-chip="enfermedades" data-value="Gastritis Hepatitis Crónica">Gastritis Hepatitis Crónica</button>
-  <button type="button" data-chip="enfermedades" data-value="Hiper/Hipotiroidismo">Hiper/Hipotiroidismo</button>
-  <button type="button" data-chip="enfermedades" data-value="Hipertensión Arterial">Hipertensión Arterial</button>
-  <button type="button" data-chip="enfermedades" data-value="Insuficiencia Cardíaca">Insuficiencia Cardíaca</button>
-  <button type="button" data-chip="enfermedades" data-value="Insuficiencia Renal">Insuficiencia Renal</button>
-  <button type="button" data-chip="enfermedades" data-value="Lupus Eritematoso">Lupus Eritematoso</button>
-  <button type="button" data-chip="enfermedades" data-value="Migraña">Migraña</button>
-  <button type="button" data-chip="enfermedades" data-value="Neoplasia">Neoplasia</button>
-  <button type="button" data-chip="enfermedades" data-value="Osteoporosis">Osteoporosis</button>
-  <button type="button" data-chip="enfermedades" data-value="Trombosis Venosa">Trombosis Venosa</button>
-  <button type="button" data-chip="enfermedades" data-value="Tuberculosis">Tuberculosis</button>
-  <button type="button" data-chip="enfermedades" data-value="Úlcera">Úlcera</button>
-  <button type="button" data-chip="enfermedades" data-value="Otros">Otros +</button>
-</div>
+                <div id="chipsEnfermedades" class="chips hidden">
+                  <button type="button" data-chip="enfermedades" data-value="ACV (Cerebral)">ACV (Cerebral)</button>
+                  <button type="button" data-chip="enfermedades" data-value="Anemia">Anemia</button>
+                  <button type="button" data-chip="enfermedades" data-value="Artritis Reumatoide">Artritis Reumatoide</button>
+                  <button type="button" data-chip="enfermedades" data-value="Asma">Asma</button>
+                  <button type="button" data-chip="enfermedades" data-value="Convulsiones">Convulsiones</button>
+                  <button type="button" data-chip="enfermedades" data-value="Diabetes Mellitus">Diabetes Mellitus</button>
+                  <button type="button" data-chip="enfermedades" data-value="Enf. Cardíaca">Enf. Cardíaca</button>
+                  <button type="button" data-chip="enfermedades" data-value="Esteatosis/Cirrosis">Esteatosis/Cirrosis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Gastritis">Gastritis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Gastritis Hepatitis Crónica">Gastritis Hepatitis Crónica</button>
+                  <button type="button" data-chip="enfermedades" data-value="Hiper/Hipotiroidismo">Hiper/Hipotiroidismo</button>
+                  <button type="button" data-chip="enfermedades" data-value="Hipertensión Arterial">Hipertensión Arterial</button>
+                  <button type="button" data-chip="enfermedades" data-value="Insuficiencia Cardíaca">Insuficiencia Cardíaca</button>
+                  <button type="button" data-chip="enfermedades" data-value="Insuficiencia Renal">Insuficiencia Renal</button>
+                  <button type="button" data-chip="enfermedades" data-value="Lupus Eritematoso">Lupus Eritematoso</button>
+                  <button type="button" data-chip="enfermedades" data-value="Migraña">Migraña</button>
+                  <button type="button" data-chip="enfermedades" data-value="Neoplasia">Neoplasia</button>
+                  <button type="button" data-chip="enfermedades" data-value="Osteoporosis">Osteoporosis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Trombosis Venosa">Trombosis Venosa</button>
+                  <button type="button" data-chip="enfermedades" data-value="Tuberculosis">Tuberculosis</button>
+                  <button type="button" data-chip="enfermedades" data-value="Úlcera">Úlcera</button>
+                  <button type="button" data-chip="enfermedades" data-value="Otros">Otros +</button>
+                </div>
+
                 <div id="enfermedadOtrosBox" class="hidden">
                   <label>Otros, especificar
                     <input name="enfermedad_otros" placeholder="Especifica otra enfermedad..." />
@@ -187,7 +234,7 @@
 
             <div class="grid-4">
               <label>Folio (obligatorio)
-                <input name="folio" required placeholder="Escanea / pega folio..." maxlength="12" />
+                <input id="inputFolio" name="folio" required placeholder="Escanea / pega folio..." maxlength="12" />
               </label>
 
               <label>Hora toma (obligatorio)
@@ -257,7 +304,7 @@
             <input type="hidden" name="centrifugacion" id="centrifugacion" />
           </div>
 
-          <div class="actions">
+          <div class="actions sticky-actions">
             <button type="button" class="secondary" id="btnLimpiar">Limpiar</button>
             <button type="submit">Guardar final</button>
           </div>
@@ -267,11 +314,18 @@
 
     <section id="buscar" class="view">
       <div class="card">
-        <h2>Buscar por folio</h2>
+        <div class="form-head">
+          <div>
+            <span class="pill">Consulta rápida</span>
+            <h2>Buscar por folio</h2>
+          </div>
+        </div>
+
         <div class="search-row">
-          <input id="buscarFolio" placeholder="Escribe el folio" />
+          <input id="buscarFolio" placeholder="Escribe, escanea o pega el folio" />
           <button type="button" id="btnBuscar">Buscar</button>
         </div>
+
         <div id="resultadoBusqueda" class="results"></div>
       </div>
     </section>

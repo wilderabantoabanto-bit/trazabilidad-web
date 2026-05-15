@@ -3,6 +3,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_QRC-82FH-YC2znJDSicb3Q_u82tcaHP";
 
 let supabaseClient;
 let registroActual = null;
+let folioActual = "";
+let ultimoGuardado = null;
 
 const selected = {
   enfermedades: [],
@@ -30,6 +32,28 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("enfermedadCronica").addEventListener("change", manejarEnfermedad);
   document.getElementById("origenRegistro").addEventListener("change", manejarOrigen);
 
+  const inputFolio = document.getElementById("inputFolio");
+  if (inputFolio) {
+    inputFolio.addEventListener("input", () => {
+      folioActual = inputFolio.value.trim();
+      actualizarPanelFolio();
+    });
+
+    inputFolio.addEventListener("paste", () => {
+      setTimeout(() => {
+        folioActual = inputFolio.value.trim();
+        actualizarPanelFolio();
+      }, 50);
+    });
+  }
+
+  const btnCopiarFolioActual = document.getElementById("btnCopiarFolioActual");
+  if (btnCopiarFolioActual) {
+    btnCopiarFolioActual.addEventListener("click", () => {
+      if (folioActual) copiarFolio(folioActual);
+    });
+  }
+
   document.querySelectorAll("[data-chip]").forEach(btn => {
     btn.addEventListener("click", () => toggleChip(btn));
   });
@@ -42,15 +66,53 @@ window.addEventListener("DOMContentLoaded", () => {
     actualizarOcultos();
     renderCentrifugacion();
   });
+
+  actualizarPanelFolio();
 });
 
 function showView(viewId) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.querySelectorAll(".menu-card").forEach(b => b.classList.remove("active"));
+
   document.getElementById(viewId).classList.add("active");
 
   const btn = document.querySelector(`[data-view="${viewId}"]`);
   if (btn) btn.classList.add("active");
+}
+
+function actualizarPanelFolio(estado = null) {
+  const folioTexto = document.getElementById("folioActualTexto");
+  const estadoTexto = document.getElementById("estadoActualTexto");
+  const ultimoTexto = document.getElementById("ultimoGuardadoTexto");
+  const btnCopiar = document.getElementById("btnCopiarFolioActual");
+
+  if (!folioTexto || !estadoTexto || !ultimoTexto || !btnCopiar) return;
+
+  if (folioActual) {
+    folioTexto.textContent = folioActual;
+    btnCopiar.disabled = false;
+  } else {
+    folioTexto.textContent = "Sin folio todavía";
+    btnCopiar.disabled = true;
+  }
+
+  if (estado) {
+    estadoTexto.textContent = estado;
+  }
+
+  if (ultimoGuardado) {
+    ultimoTexto.textContent = ultimoGuardado.toLocaleTimeString("es-PE", {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } else {
+    ultimoTexto.textContent = "Pendiente";
+  }
+}
+
+function marcarGuardadoCorrecto(estadoTexto = "ABIERTO") {
+  ultimoGuardado = new Date();
+  actualizarPanelFolio(estadoTexto);
 }
 
 function manejarFicha() {
@@ -156,7 +218,7 @@ function renderCentrifugacion() {
       <tbody>
         ${recipientesFinales.map((rec, index) => `
           <tr>
-            <td>${rec}</td>
+            <td>${limpiarHTML(rec)}</td>
             <td>
               <select data-centri="${index}" data-field="requiere_centrifugacion">
                 <option value="">--</option>
@@ -190,16 +252,10 @@ function obtenerCentrifugacion() {
   });
 }
 
-async function guardarRegistro(e) {
-  e.preventDefault();
-
-  const mensaje = document.getElementById("mensajeRegistro");
-  mensaje.textContent = "Guardando...";
-  mensaje.style.color = "#172033";
-
+function prepararDataRegistro(formulario) {
   actualizarOcultos();
 
-  const formData = new FormData(e.target);
+  const formData = new FormData(formulario);
   const data = Object.fromEntries(formData.entries());
 
   const origenOtros = valorInput("origen_otros");
@@ -232,6 +288,27 @@ async function guardarRegistro(e) {
     if (data[key] === "") data[key] = null;
   });
 
+  return data;
+}
+
+async function guardarRegistro(e) {
+  e.preventDefault();
+
+  const mensaje = document.getElementById("mensajeRegistro");
+  mensaje.textContent = "Guardando...";
+  mensaje.style.color = "#172033";
+
+  const data = prepararDataRegistro(e.target);
+
+  if (!data.folio) {
+    mensaje.textContent = "Falta ingresar el folio.";
+    mensaje.style.color = "crimson";
+    return;
+  }
+
+  folioActual = data.folio;
+  actualizarPanelFolio("Guardando...");
+
   const { error } = await supabaseClient
     .from("trazabilidad")
     .upsert([data], { onConflict: "folio" });
@@ -239,14 +316,21 @@ async function guardarRegistro(e) {
   if (error) {
     mensaje.textContent = "Error al guardar: " + error.message;
     mensaje.style.color = "crimson";
+    actualizarPanelFolio("Error al guardar");
     return;
   }
 
+  marcarGuardadoCorrecto("ABIERTO");
+
   mensaje.innerHTML = `
-    Registro guardado correctamente.
-    <br>
-    <button type="button" onclick="copiarFolio('${data.folio}')">Copiar folio</button>
-    <button type="button" onclick="abrirContinuarPorFolio('${data.folio}')">Continuar trazabilidad</button>
+    <div class="success-content">
+      <strong>Registro guardado correctamente.</strong>
+      <span>Folio: ${limpiarHTML(data.folio)}</span>
+      <div class="mini-actions">
+        <button type="button" onclick="copiarFolio('${limpiarAtributo(data.folio)}')">Copiar folio</button>
+        <button type="button" onclick="abrirContinuarPorFolio('${limpiarAtributo(data.folio)}')">Continuar trazabilidad</button>
+      </div>
+    </div>
   `;
   mensaje.style.color = "green";
 }
@@ -258,6 +342,9 @@ function limpiarFormulario() {
   selected.detalles_adicionales = [];
   selected.tipos_muestra = [];
   selected.recipientes = [];
+
+  folioActual = "";
+  ultimoGuardado = null;
 
   document.querySelectorAll(".chips button").forEach(btn => btn.classList.remove("selected"));
 
@@ -271,6 +358,7 @@ function limpiarFormulario() {
 
   actualizarOcultos();
   renderCentrifugacion();
+  actualizarPanelFolio("Registro inicial");
 
   document.getElementById("mensajeRegistro").textContent = "Sin guardar";
   document.getElementById("mensajeRegistro").style.color = "#64748b";
@@ -294,7 +382,7 @@ async function buscarRegistro() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    contenedor.innerHTML = `<div class="errorbox">Error al buscar: ${error.message}</div>`;
+    contenedor.innerHTML = `<div class="errorbox">Error al buscar: ${limpiarHTML(error.message)}</div>`;
     return;
   }
 
@@ -305,27 +393,60 @@ async function buscarRegistro() {
 
   contenedor.innerHTML = data.map(reg => `
     <div class="result-card">
-      <h3>Folio: ${reg.folio || ""}</h3>
-      <p><b>Origen:</b> ${reg.origen_registro || ""}</p>
-      <p><b>Requiere ficha:</b> ${reg.requiere_ficha || ""}</p>
-      <p><b>Responsable:</b> ${reg.responsable || ""}</p>
-      <p><b>Sede:</b> ${reg.sede || ""}</p>
-      <p><b>Muestras:</b> ${(reg.tipos_muestra || []).join(", ")}</p>
-      <p><b>Recipientes:</b> ${(reg.recipientes || []).join(", ")}</p>
-      <p><b>Estado:</b> ${reg.estado || ""}</p>
-      <p><b>Creado:</b> ${reg.created_at ? new Date(reg.created_at).toLocaleString() : ""}</p>
+      <div class="result-head">
+        <div>
+          <span class="pill">Folio encontrado</span>
+          <h3>${limpiarHTML(reg.folio || "")}</h3>
+        </div>
+        <span class="state-badge ${claseEstado(reg.estado)}">${limpiarHTML(reg.estado || "SIN ESTADO")}</span>
+      </div>
+
+      <div class="result-grid">
+        <p><b>Origen:</b> ${limpiarHTML(reg.origen_registro || "")}</p>
+        <p><b>Requiere ficha:</b> ${limpiarHTML(reg.requiere_ficha || "")}</p>
+        <p><b>Responsable:</b> ${limpiarHTML(reg.responsable || "")}</p>
+        <p><b>Sede:</b> ${limpiarHTML(reg.sede || "")}</p>
+        <p><b>Muestras:</b> ${limpiarHTML((reg.tipos_muestra || []).join(", "))}</p>
+        <p><b>Recipientes:</b> ${limpiarHTML((reg.recipientes || []).join(", "))}</p>
+        <p><b>Creado:</b> ${reg.created_at ? new Date(reg.created_at).toLocaleString("es-PE") : ""}</p>
+        <p><b>Última actualización:</b> ${reg.updated_at ? new Date(reg.updated_at).toLocaleString("es-PE") : ""}</p>
+      </div>
 
       <div class="hero-actions">
-        <button type="button" onclick="copiarFolio('${reg.folio}')">Copiar folio</button>
-        <button type="button" onclick="abrirContinuarPorFolio('${reg.folio}')">Continuar trazabilidad</button>
+        <button type="button" onclick="copiarFolio('${limpiarAtributo(reg.folio || "")}')">Copiar folio</button>
+        <button type="button" onclick="abrirContinuarPorFolio('${limpiarAtributo(reg.folio || "")}')">Continuar trazabilidad</button>
       </div>
     </div>
   `).join("");
 }
 
 async function copiarFolio(folio) {
-  await navigator.clipboard.writeText(folio);
-  alert("Folio copiado: " + folio);
+  if (!folio) return;
+
+  try {
+    await navigator.clipboard.writeText(folio);
+    mostrarAvisoTemporal("Folio copiado: " + folio);
+  } catch (error) {
+    alert("Folio copiado: " + folio);
+  }
+}
+
+function mostrarAvisoTemporal(texto) {
+  let aviso = document.getElementById("toastAviso");
+
+  if (!aviso) {
+    aviso = document.createElement("div");
+    aviso.id = "toastAviso";
+    aviso.className = "toast-aviso";
+    document.body.appendChild(aviso);
+  }
+
+  aviso.textContent = texto;
+  aviso.classList.add("show");
+
+  setTimeout(() => {
+    aviso.classList.remove("show");
+  }, 2200);
 }
 
 async function abrirContinuarPorFolio(folio) {
@@ -393,7 +514,7 @@ function crearModalContinuar() {
           <textarea id="observacionesFinales" rows="4" placeholder="Escribe observaciones finales si aplica"></textarea>
         </div>
 
-        <div class="actions">
+        <div class="actions sticky-actions">
           <button type="button" class="secondary" onclick="cerrarModalContinuar()">Cerrar ventana</button>
           <button type="button" onclick="guardarAvance()">Guardar avance</button>
           <button type="button" class="danger-btn" onclick="cerrarFolio()">Cerrar folio</button>
@@ -447,7 +568,7 @@ function renderTablaControl(reg) {
           const item = guardado.find(x => x.recipiente === rec) || {};
           return `
             <tr>
-              <td>${rec}</td>
+              <td>${limpiarHTML(rec)}</td>
               <td>
                 <select data-control="${index}" data-field="centrifuga">
                   <option value="">--</option>
@@ -456,8 +577,8 @@ function renderTablaControl(reg) {
                   <option ${item.centrifuga === "NO APLICA" ? "selected" : ""}>NO APLICA</option>
                 </select>
               </td>
-              <td><input type="time" data-control="${index}" data-field="ingreso" value="${item.ingreso || ""}" /></td>
-              <td><input type="time" data-control="${index}" data-field="salida" value="${item.salida || ""}" /></td>
+              <td><input type="time" data-control="${index}" data-field="ingreso" value="${limpiarAtributo(item.ingreso || "")}" /></td>
+              <td><input type="time" data-control="${index}" data-field="salida" value="${limpiarAtributo(item.salida || "")}" /></td>
             </tr>
           `;
         }).join("")}
@@ -490,7 +611,7 @@ function renderTablaEntrega(reg) {
           const item = guardado.find(x => x.recipiente === rec) || {};
           return `
             <tr>
-              <td>${rec}</td>
+              <td>${limpiarHTML(rec)}</td>
               <td>
                 <select data-entrega="${index}" data-field="area">
                   <option value="">-- Selecciona --</option>
@@ -501,7 +622,7 @@ function renderTablaEntrega(reg) {
                   <option ${item.area === "MICROBIOLOGÍA" ? "selected" : ""}>MICROBIOLOGÍA</option>
                 </select>
               </td>
-              <td><input type="time" data-entrega="${index}" data-field="hora" value="${item.hora || ""}" /></td>
+              <td><input type="time" data-entrega="${index}" data-field="hora" value="${limpiarAtributo(item.hora || "")}" /></td>
             </tr>
           `;
         }).join("")}
@@ -543,6 +664,10 @@ function obtenerEntrega() {
 async function guardarAvance() {
   if (!registroActual) return;
 
+  const mensaje = document.getElementById("mensajeContinuar");
+  mensaje.textContent = "Guardando avance...";
+  mensaje.style.color = "#172033";
+
   const payload = {
     hora_ingreso_control: document.getElementById("horaIngresoControl").value || null,
     responsable_ingreso: document.getElementById("responsableIngreso").value || null,
@@ -560,19 +685,30 @@ async function guardarAvance() {
     .eq("folio", registroActual.folio);
 
   if (error) {
-    document.getElementById("mensajeContinuar").textContent = "Error al guardar avance: " + error.message;
-    document.getElementById("mensajeContinuar").style.color = "crimson";
-    return;
+    mensaje.textContent = "Error al guardar avance: " + error.message;
+    mensaje.style.color = "crimson";
+    return false;
   }
 
-  document.getElementById("mensajeContinuar").textContent = "Avance guardado correctamente.";
-  document.getElementById("mensajeContinuar").style.color = "green";
+  registroActual = {
+    ...registroActual,
+    ...payload
+  };
+
+  mensaje.textContent = "Avance guardado correctamente.";
+  mensaje.style.color = "green";
+  return true;
 }
 
 async function cerrarFolio() {
   if (!registroActual) return;
 
-  await guardarAvance();
+  const guardado = await guardarAvance();
+
+  if (!guardado) {
+    alert("No se pudo cerrar el folio porque el avance no se guardó correctamente.");
+    return;
+  }
 
   const { error } = await supabaseClient
     .from("trazabilidad")
@@ -589,4 +725,27 @@ async function cerrarFolio() {
 
   alert("Folio cerrado correctamente.");
   cerrarModalContinuar();
+}
+
+function claseEstado(estado) {
+  const limpio = (estado || "").toUpperCase();
+
+  if (limpio === "CERRADO") return "closed";
+  if (limpio === "EN PROCESO") return "process";
+  if (limpio === "ABIERTO") return "open";
+
+  return "unknown";
+}
+
+function limpiarHTML(valor) {
+  return String(valor)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function limpiarAtributo(valor) {
+  return limpiarHTML(valor).replaceAll("`", "&#096;");
 }
