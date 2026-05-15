@@ -5,6 +5,14 @@ const TIEMPO_AUTOGUARDADO_MS = 1200;
 const MIN_FOLIO_AUTOGUARDADO = 6;
 const MINUTOS_CENTRIFUGACION = 10;
 
+const AREAS_DESTINO = [
+  "BIOQUÍMICA",
+  "HEMATOLOGÍA",
+  "COAGULOMETRÍA",
+  "INMUNOLOGÍA",
+  "MICROBIOLOGÍA"
+];
+
 let supabaseClient;
 let registroActual = null;
 let folioActual = "";
@@ -617,7 +625,7 @@ function crearModalContinuar() {
         <div class="section-card">
           <h3>ENTREGA AL ÁREA</h3>
 
-          <label>Responsable entrega
+          <label>Responsable entrega general
             <input id="responsableEntrega" placeholder="Nombre del responsable" />
           </label>
 
@@ -638,13 +646,31 @@ function crearModalContinuar() {
     </div>
   `;
 
+  modal.addEventListener("click", evento => {
+    const chip = evento.target.closest(".area-chip");
+
+    if (chip) {
+      chip.classList.toggle("selected");
+      manejarAreaOtrosEntrega(chip.dataset.entrega);
+      programarAutoGuardadoAvance();
+    }
+  });
+
   modal.addEventListener("input", evento => {
+    if (evento.target.id === "responsableEntrega") {
+      sincronizarResponsableEntrega();
+    }
+
     if (evento.target.matches("input, select, textarea")) {
       programarAutoGuardadoAvance();
     }
   });
 
   modal.addEventListener("change", evento => {
+    if (evento.target.id === "responsableEntrega") {
+      sincronizarResponsableEntrega();
+    }
+
     if (evento.target.matches("input, select, textarea")) {
       programarAutoGuardadoAvance();
     }
@@ -776,6 +802,7 @@ function sumarMinutosHora(hora, minutos) {
 function renderTablaEntrega(reg) {
   const recipientes = reg.recipientes || [];
   const guardado = reg.entrega_area || [];
+  const responsableGeneral = reg.responsable_entrega || "";
   const box = document.getElementById("tablaEntrega");
 
   if (recipientes.length === 0) {
@@ -788,33 +815,86 @@ function renderTablaEntrega(reg) {
       <thead>
         <tr>
           <th>Recipiente</th>
-          <th>Área destino</th>
+          <th>Áreas destino</th>
           <th>Hora entrega</th>
+          <th>Responsable</th>
         </tr>
       </thead>
       <tbody>
         ${recipientes.map((rec, index) => {
           const item = guardado.find(x => x.recipiente === rec) || {};
+          const areasGuardadas = obtenerAreasGuardadas(item);
+          const responsableFila = item.responsable || item.responsable_entrega || responsableGeneral || "";
+
           return `
             <tr>
-              <td>${limpiarHTML(rec)}</td>
+              <td><b>${limpiarHTML(rec)}</b></td>
               <td>
-                <select data-entrega="${index}" data-field="area">
-                  <option value="">-- Selecciona --</option>
-                  <option ${item.area === "BIOQUÍMICA" ? "selected" : ""}>BIOQUÍMICA</option>
-                  <option ${item.area === "HEMATOLOGÍA" ? "selected" : ""}>HEMATOLOGÍA</option>
-                  <option ${item.area === "COAGULOMETRÍA" ? "selected" : ""}>COAGULOMETRÍA</option>
-                  <option ${item.area === "INMUNOLOGÍA" ? "selected" : ""}>INMUNOLOGÍA</option>
-                  <option ${item.area === "MICROBIOLOGÍA" ? "selected" : ""}>MICROBIOLOGÍA</option>
-                </select>
+                <div class="chips table-chips">
+                  ${AREAS_DESTINO.map(area => `
+                    <button
+                      type="button"
+                      class="area-chip ${areasGuardadas.includes(area) ? "selected" : ""}"
+                      data-entrega="${index}"
+                      data-area="${limpiarAtributo(area)}"
+                    >${limpiarHTML(area)}</button>
+                  `).join("")}
+                </div>
+
+                <div class="area-otros-box ${areasGuardadas.includes("OTROS") ? "" : "hidden"}" id="areaOtrosBox_${index}">
+                  <input
+                    data-entrega="${index}"
+                    data-field="area_otros"
+                    placeholder="Especifica otra área..."
+                    value="${limpiarAtributo(item.area_otros || "")}"
+                  />
+                </div>
               </td>
-              <td><input type="time" data-entrega="${index}" data-field="hora" value="${limpiarAtributo(item.hora || "")}" /></td>
+              <td>
+                <input type="time" data-entrega="${index}" data-field="hora" value="${limpiarAtributo(item.hora || "")}" />
+              </td>
+              <td>
+                <input data-entrega="${index}" data-field="responsable" placeholder="Responsable" value="${limpiarAtributo(responsableFila)}" />
+              </td>
             </tr>
           `;
         }).join("")}
       </tbody>
     </table>
+    <p class="table-note">Puedes seleccionar una o varias áreas por recipiente. El responsable general se copia automáticamente a cada fila.</p>
   `;
+}
+
+function obtenerAreasGuardadas(item) {
+  if (Array.isArray(item.areas)) {
+    return item.areas;
+  }
+
+  if (item.area && typeof item.area === "string") {
+    return item.area
+      .split(",")
+      .map(x => x.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function manejarAreaOtrosEntrega(index) {
+  const chipOtros = document.querySelector(`.area-chip[data-entrega="${index}"][data-area="OTROS"]`);
+  const boxOtros = document.getElementById(`areaOtrosBox_${index}`);
+
+  if (!chipOtros || !boxOtros) return;
+
+  boxOtros.classList.toggle("hidden", !chipOtros.classList.contains("selected"));
+}
+
+function sincronizarResponsableEntrega() {
+  const responsableGeneral = document.getElementById("responsableEntrega").value || "";
+
+  document.querySelectorAll('[data-entrega][data-field="responsable"]').forEach(input => {
+    input.value = responsableGeneral;
+  });
 }
 
 function obtenerControl() {
@@ -836,14 +916,27 @@ function obtenerEntrega() {
   const recipientes = registroActual.recipientes || [];
 
   return recipientes.map((rec, index) => {
-    const campos = document.querySelectorAll(`[data-entrega="${index}"]`);
-    const item = { recipiente: rec };
+    const chipsSeleccionados = document.querySelectorAll(`.area-chip[data-entrega="${index}"].selected`);
+    const areaOtrosInput = document.querySelector(`[data-entrega="${index}"][data-field="area_otros"]`);
+    const horaInput = document.querySelector(`[data-entrega="${index}"][data-field="hora"]`);
+    const responsableInput = document.querySelector(`[data-entrega="${index}"][data-field="responsable"]`);
 
-    campos.forEach(campo => {
-      item[campo.dataset.field] = campo.value || null;
-    });
+    let areas = Array.from(chipsSeleccionados).map(chip => chip.dataset.area);
 
-    return item;
+    const areaOtros = areaOtrosInput ? areaOtrosInput.value.trim() : "";
+    if (areas.includes("OTROS") && areaOtros) {
+      areas = areas.filter(area => area !== "OTROS");
+      areas.push(areaOtros);
+    }
+
+    return {
+      recipiente: rec,
+      areas: areas,
+      area: areas.join(", "),
+      area_otros: areaOtros || null,
+      hora: horaInput?.value || null,
+      responsable: responsableInput?.value || null
+    };
   });
 }
 
@@ -874,10 +967,12 @@ async function guardarAvance(silencioso = false) {
     mensaje.style.color = "#172033";
   }
 
+  const responsableEntregaGeneral = document.getElementById("responsableEntrega").value || null;
+
   const payload = {
     hora_ingreso_control: document.getElementById("horaIngresoControl").value || null,
     responsable_ingreso: document.getElementById("responsableIngreso").value || null,
-    responsable_entrega: document.getElementById("responsableEntrega").value || null,
+    responsable_entrega: responsableEntregaGeneral,
     centrifugacion_control: obtenerControl(),
     entrega_area: obtenerEntrega(),
     observaciones_finales: document.getElementById("observacionesFinales").value || null,
