@@ -1,10 +1,19 @@
 const SUPABASE_URL = "https://kqbetryygymtsyhsowxj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QRC-82FH-YC2znJDSicb3Q_u82tcaHP";
 
+const TIEMPO_AUTOGUARDADO_MS = 1200;
+const MIN_FOLIO_AUTOGUARDADO = 6;
+const MINUTOS_CENTRIFUGACION = 10;
+
 let supabaseClient;
 let registroActual = null;
 let folioActual = "";
 let ultimoGuardado = null;
+let autosaveTimerRegistro = null;
+let autosaveTimerAvance = null;
+let hashUltimoRegistroGuardado = "";
+let guardadoFinalEnProceso = false;
+let avanceEnProceso = false;
 
 const selected = {
   enfermedades: [],
@@ -28,6 +37,10 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnLimpiar").addEventListener("click", limpiarFormulario);
   document.getElementById("formRegistro").addEventListener("submit", guardarRegistro);
 
+  const formRegistro = document.getElementById("formRegistro");
+  formRegistro.addEventListener("input", programarAutoGuardadoRegistro);
+  formRegistro.addEventListener("change", programarAutoGuardadoRegistro);
+
   document.getElementById("requiereFicha").addEventListener("change", manejarFicha);
   document.getElementById("enfermedadCronica").addEventListener("change", manejarEnfermedad);
   document.getElementById("origenRegistro").addEventListener("change", manejarOrigen);
@@ -43,6 +56,7 @@ window.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         folioActual = inputFolio.value.trim();
         actualizarPanelFolio();
+        programarAutoGuardadoRegistro();
       }, 50);
     });
   }
@@ -60,11 +74,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.querySelector('[name="tipo_muestra_otros"]')?.addEventListener("input", () => {
     actualizarOcultos();
+    programarAutoGuardadoRegistro();
   });
 
   document.querySelector('[name="recipiente_otros"]')?.addEventListener("input", () => {
     actualizarOcultos();
     renderCentrifugacion();
+    programarAutoGuardadoRegistro();
   });
 
   actualizarPanelFolio();
@@ -150,6 +166,8 @@ function toggleChip(btn) {
   if (grupo === "recipientes") {
     renderCentrifugacion();
   }
+
+  programarAutoGuardadoRegistro();
 }
 
 function manejarCajasOtros() {
@@ -265,6 +283,7 @@ function prepararDataRegistro(formulario) {
     data.origen_registro = "OTROS: " + origenOtros;
   }
 
+  data.folio = (data.folio || "").trim();
   data.tipos_muestra = getTiposMuestraFinales();
   data.recipientes = getRecipientesFinales();
   data.enfermedades = [...selected.enfermedades];
@@ -276,7 +295,6 @@ function prepararDataRegistro(formulario) {
   }
 
   data.centrifugacion = obtenerCentrifugacion();
-  data.estado = "ABIERTO";
   data.updated_at = new Date().toISOString();
 
   delete data.origen_otros;
@@ -291,27 +309,120 @@ function prepararDataRegistro(formulario) {
   return data;
 }
 
+async function obtenerEstadoExistente(folio) {
+  if (!folio) return null;
+
+  const { data, error } = await supabaseClient
+    .from("trazabilidad")
+    .select("estado")
+    .eq("folio", folio)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("No se pudo verificar el estado del folio:", error.message);
+    return null;
+  }
+
+  return data?.estado || null;
+}
+
+function programarAutoGuardadoRegistro() {
+  if (guardadoFinalEnProceso) return;
+
+  const inputFolio = document.getElementById("inputFolio");
+  folioActual = inputFolio ? inputFolio.value.trim() : folioActual;
+  actualizarPanelFolio();
+
+  clearTimeout(autosaveTimerRegistro);
+
+  if (!folioActual || folioActual.length < MIN_FOLIO_AUTOGUARDADO) return;
+
+  autosaveTimerRegistro = setTimeout(realizarAutoGuardadoRegistro, TIEMPO_AUTOGUARDADO_MS);
+}
+
+async function realizarAutoGuardadoRegistro() {
+  if (guardadoFinalEnProceso) return;
+
+  const form = document.getElementById("formRegistro");
+  const mensaje = document.getElementById("mensajeRegistro");
+  const data = prepararDataRegistro(form);
+
+  if (!data.folio || data.folio.length < MIN_FOLIO_AUTOGUARDADO) return;
+
+  const hashActual = JSON.stringify(data);
+  if (hashActual === hashUltimoRegistroGuardado) return;
+
+  mensaje.textContent = "Autoguardando borrador...";
+  mensaje.style.color = "#172033";
+  actualizarPanelFolio("Autoguardando...");
+
+  const estadoExistente = await obtenerEstadoExistente(data.folio);
+
+  if ((estadoExistente || "").toUpperCase() === "CERRADO") {
+    mensaje.textContent = "Este folio está CERRADO. No se puede modificar desde registro.";
+    mensaje.style.color = "crimson";
+    actualizarPanelFolio("CERRADO");
+    return;
+  }
+
+  data.estado = estadoExistente || "ABIERTO";
+
+  const { error } = await supabaseClient
+    .from("trazabilidad")
+    .upsert([data], { onConflict: "folio" });
+
+  if (error) {
+    mensaje.textContent = "Error en autoguardado: " + error.message;
+    mensaje.style.color = "crimson";
+    actualizarPanelFolio("Error al guardar");
+    return;
+  }
+
+  hashUltimoRegistroGuardado = hashActual;
+  marcarGuardadoCorrecto(data.estado);
+  mensaje.textContent = "Borrador autoguardado.";
+  mensaje.style.color = "#17804b";
+}
+
 async function guardarRegistro(e) {
   e.preventDefault();
+  clearTimeout(autosaveTimerRegistro);
 
   const mensaje = document.getElementById("mensajeRegistro");
   mensaje.textContent = "Guardando...";
   mensaje.style.color = "#172033";
+
+  guardadoFinalEnProceso = true;
 
   const data = prepararDataRegistro(e.target);
 
   if (!data.folio) {
     mensaje.textContent = "Falta ingresar el folio.";
     mensaje.style.color = "crimson";
+    guardadoFinalEnProceso = false;
     return;
   }
 
   folioActual = data.folio;
   actualizarPanelFolio("Guardando...");
 
+  const estadoExistente = await obtenerEstadoExistente(data.folio);
+
+  if ((estadoExistente || "").toUpperCase() === "CERRADO") {
+    mensaje.textContent = "Este folio ya está CERRADO. No se puede modificar desde registro.";
+    mensaje.style.color = "crimson";
+    actualizarPanelFolio("CERRADO");
+    guardadoFinalEnProceso = false;
+    return;
+  }
+
+  data.estado = estadoExistente || "ABIERTO";
+
   const { error } = await supabaseClient
     .from("trazabilidad")
     .upsert([data], { onConflict: "folio" });
+
+  guardadoFinalEnProceso = false;
 
   if (error) {
     mensaje.textContent = "Error al guardar: " + error.message;
@@ -320,7 +431,8 @@ async function guardarRegistro(e) {
     return;
   }
 
-  marcarGuardadoCorrecto("ABIERTO");
+  hashUltimoRegistroGuardado = JSON.stringify(data);
+  marcarGuardadoCorrecto(data.estado);
 
   mensaje.innerHTML = `
     <div class="success-content">
@@ -329,6 +441,7 @@ async function guardarRegistro(e) {
       <div class="mini-actions">
         <button type="button" onclick="copiarFolio('${limpiarAtributo(data.folio)}')">Copiar folio</button>
         <button type="button" onclick="abrirContinuarPorFolio('${limpiarAtributo(data.folio)}')">Continuar trazabilidad</button>
+        <button type="button" class="secondary" onclick="limpiarFormulario()">Nuevo registro</button>
       </div>
     </div>
   `;
@@ -336,6 +449,7 @@ async function guardarRegistro(e) {
 }
 
 function limpiarFormulario() {
+  clearTimeout(autosaveTimerRegistro);
   document.getElementById("formRegistro").reset();
 
   selected.enfermedades = [];
@@ -345,6 +459,7 @@ function limpiarFormulario() {
 
   folioActual = "";
   ultimoGuardado = null;
+  hashUltimoRegistroGuardado = "";
 
   document.querySelectorAll(".chips button").forEach(btn => btn.classList.remove("selected"));
 
@@ -523,10 +638,24 @@ function crearModalContinuar() {
     </div>
   `;
 
+  modal.addEventListener("input", evento => {
+    if (evento.target.matches("input, select, textarea")) {
+      programarAutoGuardadoAvance();
+    }
+  });
+
+  modal.addEventListener("change", evento => {
+    if (evento.target.matches("input, select, textarea")) {
+      programarAutoGuardadoAvance();
+    }
+  });
+
   document.body.appendChild(modal);
 }
 
 function cargarModalContinuar(reg) {
+  clearTimeout(autosaveTimerAvance);
+
   document.getElementById("modalContinuar").classList.remove("hidden");
   document.getElementById("continuarPill").textContent = "Continuar • Folio: " + reg.folio;
 
@@ -535,11 +664,16 @@ function cargarModalContinuar(reg) {
   document.getElementById("responsableEntrega").value = reg.responsable_entrega || "";
   document.getElementById("observacionesFinales").value = reg.observaciones_finales || "";
 
+  const mensaje = document.getElementById("mensajeContinuar");
+  mensaje.textContent = "Borrador cargado";
+  mensaje.style.color = "#64748b";
+
   renderTablaControl(reg);
   renderTablaEntrega(reg);
 }
 
 function cerrarModalContinuar() {
+  clearTimeout(autosaveTimerAvance);
   document.getElementById("modalContinuar").classList.add("hidden");
 }
 
@@ -560,12 +694,14 @@ function renderTablaControl(reg) {
           <th>Recipiente</th>
           <th>¿Centrifuga?</th>
           <th>Ingreso</th>
-          <th>Salida</th>
+          <th>Salida automática</th>
         </tr>
       </thead>
       <tbody>
         ${recipientes.map((rec, index) => {
           const item = guardado.find(x => x.recipiente === rec) || {};
+          const salida = item.salida || (item.ingreso ? sumarMinutosHora(item.ingreso, MINUTOS_CENTRIFUGACION) : "");
+
           return `
             <tr>
               <td>${limpiarHTML(rec)}</td>
@@ -578,13 +714,63 @@ function renderTablaControl(reg) {
                 </select>
               </td>
               <td><input type="time" data-control="${index}" data-field="ingreso" value="${limpiarAtributo(item.ingreso || "")}" /></td>
-              <td><input type="time" data-control="${index}" data-field="salida" value="${limpiarAtributo(item.salida || "")}" /></td>
+              <td><input type="time" data-control="${index}" data-field="salida" value="${limpiarAtributo(salida)}" /></td>
             </tr>
           `;
         }).join("")}
       </tbody>
     </table>
+    <p class="table-note">La salida se calcula automáticamente sumando ${MINUTOS_CENTRIFUGACION} minutos a la hora de ingreso.</p>
   `;
+
+  configurarAutoSalidaControl();
+}
+
+function configurarAutoSalidaControl() {
+  document.querySelectorAll('[data-control][data-field="ingreso"]').forEach(input => {
+    input.addEventListener("input", () => {
+      autocompletarSalidaControl(input.dataset.control);
+    });
+
+    input.addEventListener("change", () => {
+      autocompletarSalidaControl(input.dataset.control);
+    });
+  });
+}
+
+function autocompletarSalidaControl(index) {
+  const ingreso = document.querySelector(`[data-control="${index}"][data-field="ingreso"]`);
+  const salida = document.querySelector(`[data-control="${index}"][data-field="salida"]`);
+  const centrifuga = document.querySelector(`[data-control="${index}"][data-field="centrifuga"]`);
+
+  if (!ingreso || !salida) return;
+
+  if (!ingreso.value) {
+    salida.value = "";
+    return;
+  }
+
+  salida.value = sumarMinutosHora(ingreso.value, MINUTOS_CENTRIFUGACION);
+
+  if (centrifuga && !centrifuga.value) {
+    centrifuga.value = "SI";
+  }
+}
+
+function sumarMinutosHora(hora, minutos) {
+  if (!hora || !hora.includes(":")) return "";
+
+  const [hh, mm] = hora.split(":").map(Number);
+
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return "";
+
+  const fecha = new Date(2000, 0, 1, hh, mm, 0);
+  fecha.setMinutes(fecha.getMinutes() + minutos);
+
+  const nuevaHora = String(fecha.getHours()).padStart(2, "0");
+  const nuevosMinutos = String(fecha.getMinutes()).padStart(2, "0");
+
+  return `${nuevaHora}:${nuevosMinutos}`;
 }
 
 function renderTablaEntrega(reg) {
@@ -661,12 +847,32 @@ function obtenerEntrega() {
   });
 }
 
-async function guardarAvance() {
-  if (!registroActual) return;
+function programarAutoGuardadoAvance() {
+  if (!registroActual || avanceEnProceso) return;
+
+  clearTimeout(autosaveTimerAvance);
 
   const mensaje = document.getElementById("mensajeContinuar");
-  mensaje.textContent = "Guardando avance...";
-  mensaje.style.color = "#172033";
+  if (mensaje) {
+    mensaje.textContent = "Autoguardando avance...";
+    mensaje.style.color = "#172033";
+  }
+
+  autosaveTimerAvance = setTimeout(() => guardarAvance(true), TIEMPO_AUTOGUARDADO_MS);
+}
+
+async function guardarAvance(silencioso = false) {
+  if (!registroActual || avanceEnProceso) return false;
+
+  clearTimeout(autosaveTimerAvance);
+  avanceEnProceso = true;
+
+  const mensaje = document.getElementById("mensajeContinuar");
+
+  if (!silencioso && mensaje) {
+    mensaje.textContent = "Guardando avance...";
+    mensaje.style.color = "#172033";
+  }
 
   const payload = {
     hora_ingreso_control: document.getElementById("horaIngresoControl").value || null,
@@ -684,9 +890,13 @@ async function guardarAvance() {
     .update(payload)
     .eq("folio", registroActual.folio);
 
+  avanceEnProceso = false;
+
   if (error) {
-    mensaje.textContent = "Error al guardar avance: " + error.message;
-    mensaje.style.color = "crimson";
+    if (mensaje) {
+      mensaje.textContent = "Error al guardar avance: " + error.message;
+      mensaje.style.color = "crimson";
+    }
     return false;
   }
 
@@ -695,15 +905,18 @@ async function guardarAvance() {
     ...payload
   };
 
-  mensaje.textContent = "Avance guardado correctamente.";
-  mensaje.style.color = "green";
+  if (mensaje) {
+    mensaje.textContent = silencioso ? "Avance autoguardado." : "Avance guardado correctamente.";
+    mensaje.style.color = "green";
+  }
+
   return true;
 }
 
 async function cerrarFolio() {
   if (!registroActual) return;
 
-  const guardado = await guardarAvance();
+  const guardado = await guardarAvance(false);
 
   if (!guardado) {
     alert("No se pudo cerrar el folio porque el avance no se guardó correctamente.");
@@ -722,6 +935,8 @@ async function cerrarFolio() {
     alert("Error al cerrar folio: " + error.message);
     return;
   }
+
+  registroActual.estado = "CERRADO";
 
   alert("Folio cerrado correctamente.");
   cerrarModalContinuar();
