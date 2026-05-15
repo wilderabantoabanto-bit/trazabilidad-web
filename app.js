@@ -25,6 +25,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("requiereFicha").addEventListener("change", manejarFicha);
   document.getElementById("enfermedadCronica").addEventListener("change", manejarEnfermedad);
+  document.getElementById("origenRegistro").addEventListener("change", manejarOrigen);
 
   document.querySelectorAll("[data-chip]").forEach(btn => {
     btn.addEventListener("click", () => toggleChip(btn));
@@ -51,6 +52,11 @@ function manejarEnfermedad() {
   document.getElementById("chipsEnfermedades").classList.toggle("hidden", valor !== "SI");
 }
 
+function manejarOrigen() {
+  const valor = document.getElementById("origenRegistro").value;
+  document.getElementById("origenOtrosBox").classList.toggle("hidden", valor !== "OTROS");
+}
+
 function toggleChip(btn) {
   const grupo = btn.dataset.chip;
   const valor = btn.dataset.value;
@@ -65,11 +71,34 @@ function toggleChip(btn) {
     btn.classList.add("selected");
   }
 
+  manejarCajasOtros();
   actualizarOcultos();
 
   if (grupo === "recipientes") {
     renderCentrifugacion();
   }
+}
+
+function manejarCajasOtros() {
+  document.getElementById("enfermedadOtrosBox").classList.toggle(
+    "hidden",
+    !selected.enfermedades.includes("Otros")
+  );
+
+  document.getElementById("detallesOtrosBox").classList.toggle(
+    "hidden",
+    !selected.detalles_adicionales.includes("Otros")
+  );
+
+  document.getElementById("muestraOtrosBox").classList.toggle(
+    "hidden",
+    !selected.tipos_muestra.includes("Otros")
+  );
+
+  document.getElementById("recipienteOtrosBox").classList.toggle(
+    "hidden",
+    !selected.recipientes.includes("Otros")
+  );
 }
 
 function actualizarOcultos() {
@@ -92,9 +121,8 @@ function renderCentrifugacion() {
       <thead>
         <tr>
           <th>Recipiente</th>
-          <th>¿Centrifuga?</th>
+          <th>¿Requiere Centrifugación?</th>
           <th>Hora</th>
-          <th>Observación</th>
         </tr>
       </thead>
       <tbody>
@@ -102,7 +130,7 @@ function renderCentrifugacion() {
           <tr>
             <td>${rec}</td>
             <td>
-              <select data-centri="${index}" data-field="centrifuga">
+              <select data-centri="${index}" data-field="requiere_centrifugacion">
                 <option value="">--</option>
                 <option>SI</option>
                 <option>NO</option>
@@ -111,9 +139,6 @@ function renderCentrifugacion() {
             </td>
             <td>
               <input type="time" data-centri="${index}" data-field="hora" />
-            </td>
-            <td>
-              <input placeholder="Obs." data-centri="${index}" data-field="observacion" />
             </td>
           </tr>
         `).join("")}
@@ -135,6 +160,11 @@ function obtenerCentrifugacion() {
   });
 }
 
+function valorInput(name) {
+  const input = document.querySelector(`[name="${name}"]`);
+  return input ? input.value.trim() : "";
+}
+
 async function guardarRegistro(e) {
   e.preventDefault();
 
@@ -147,13 +177,31 @@ async function guardarRegistro(e) {
   const formData = new FormData(e.target);
   const data = Object.fromEntries(formData.entries());
 
-  data.tipos_muestra = selected.tipos_muestra;
-  data.recipientes = selected.recipientes;
-  data.enfermedades = selected.enfermedades;
-  data.detalles_adicionales = selected.detalles_adicionales;
-  data.centrifugacion = obtenerCentrifugacion();
+  const origenOtros = valorInput("origen_otros");
+  const enfermedadOtros = valorInput("enfermedad_otros");
+  const muestraOtros = valorInput("tipo_muestra_otros");
+  const recipienteOtros = valorInput("recipiente_otros");
 
+  if (data.origen_registro === "OTROS" && origenOtros) {
+    data.origen_registro = "OTROS: " + origenOtros;
+  }
+
+  data.tipos_muestra = [...selected.tipos_muestra];
+  data.recipientes = [...selected.recipientes];
+  data.enfermedades = [...selected.enfermedades];
+  data.detalles_adicionales = [...selected.detalles_adicionales];
+
+  if (muestraOtros) data.tipos_muestra.push("OTROS: " + muestraOtros);
+  if (recipienteOtros) data.recipientes.push("OTROS: " + recipienteOtros);
+  if (enfermedadOtros) data.enfermedades.push("OTROS: " + enfermedadOtros);
+
+  data.centrifugacion = obtenerCentrifugacion();
   data.estado = "ABIERTO";
+
+  delete data.origen_otros;
+  delete data.enfermedad_otros;
+  delete data.tipo_muestra_otros;
+  delete data.recipiente_otros;
 
   Object.keys(data).forEach(key => {
     if (data[key] === "") data[key] = null;
@@ -186,6 +234,11 @@ function limpiarFormulario() {
 
   document.getElementById("bloquePreanalitica").classList.add("hidden");
   document.getElementById("chipsEnfermedades").classList.add("hidden");
+  document.getElementById("origenOtrosBox").classList.add("hidden");
+  document.getElementById("enfermedadOtrosBox").classList.add("hidden");
+  document.getElementById("detallesOtrosBox").classList.add("hidden");
+  document.getElementById("muestraOtrosBox").classList.add("hidden");
+  document.getElementById("recipienteOtrosBox").classList.add("hidden");
 
   actualizarOcultos();
   renderCentrifugacion();
@@ -231,7 +284,6 @@ async function buscarRegistro() {
       <p><b>Muestras:</b> ${(reg.tipos_muestra || []).join(", ")}</p>
       <p><b>Recipientes:</b> ${(reg.recipientes || []).join(", ")}</p>
       <p><b>Estado:</b> ${reg.estado || ""}</p>
-      <p><b>Observaciones:</b> ${reg.observaciones || ""}</p>
       <p><b>Creado:</b> ${reg.created_at ? new Date(reg.created_at).toLocaleString() : ""}</p>
     </div>
   `).join("");

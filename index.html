@@ -13,7 +13,7 @@
       <h1>Trazabilidad</h1>
       <p>Sistema interno de registro y búsqueda</p>
     </div>
-    <span class="badge">V3</span>
+    <span class="badge">V3.1</span>
   </header>
 
   <main class="container">
@@ -50,11 +50,10 @@
 
             <div class="grid-2">
               <label>Origen del registro (obligatorio)
-                <select name="origen_registro" required>
-                  <option value="">-- Selecciona --</option>
+                <select name="origen_registro" id="origenRegistro" required>
                   <option>CLIENTE PARTICULAR</option>
                   <option>LABORATORIO ALIADO</option>
-                  <option>NO REGISTRA</option>
+                  <option>OTROS</option>
                 </select>
               </label>
 
@@ -64,6 +63,12 @@
                   <option>SI</option>
                   <option>NO</option>
                 </select>
+              </label>
+            </div>
+
+            <div id="origenOtrosBox" class="hidden">
+              <label>Otros, especificar
+                <input name="origen_otros" placeholder="Especifica el origen del registro..." />
               </label>
             </div>
 
@@ -128,6 +133,12 @@
                   <button type="button" data-chip="enfermedades" data-value="Tuberculosis">Tuberculosis</button>
                   <button type="button" data-chip="enfermedades" data-value="Otros">Otros +</button>
                 </div>
+
+                <div id="enfermedadOtrosBox" class="hidden">
+                  <label>Otros, especificar
+                    <input name="enfermedad_otros" placeholder="Especifica otra enfermedad..." />
+                  </label>
+                </div>
               </div>
 
               <div class="question-card">
@@ -154,9 +165,12 @@
                   <button type="button" data-chip="detalles_adicionales" data-value="Ninguno">Ninguno</button>
                   <button type="button" data-chip="detalles_adicionales" data-value="Otros">Otros +</button>
                 </div>
-                <label>Especifica “Otros”
-                  <input name="detalles_otros" placeholder="Ej: ayuno incompleto, procedimiento reciente, etc." />
-                </label>
+
+                <div id="detallesOtrosBox" class="hidden">
+                  <label>Especifica “Otros”
+                    <input name="detalles_otros" placeholder="Ej: ayuno incompleto, procedimiento reciente, etc." />
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -200,6 +214,12 @@
               <button type="button" data-chip="tipos_muestra" data-value="Otros">Otros +</button>
             </div>
 
+            <div id="muestraOtrosBox" class="hidden">
+              <label>Otro tipo de muestra
+                <input name="tipo_muestra_otros" placeholder="Escribe otro tipo de muestra..." />
+              </label>
+            </div>
+
             <h4>Recipientes</h4>
             <div class="chips">
               <button type="button" data-chip="recipientes" data-value="T. Rojo">T. Rojo</button>
@@ -212,14 +232,16 @@
               <button type="button" data-chip="recipientes" data-value="Otros">Otros +</button>
             </div>
 
+            <div id="recipienteOtrosBox" class="hidden">
+              <label>Otro tipo de recipiente
+                <input name="recipiente_otros" placeholder="Escribe otro tipo de recipiente..." />
+              </label>
+            </div>
+
             <h4>Centrifugación (por recipiente)</h4>
             <div id="tablaCentrifugacion" class="centrifuga-box">
               Selecciona recipientes arriba para generar la tabla.
             </div>
-
-            <label>Observaciones
-              <textarea name="observaciones" rows="3" placeholder="Escribe observaciones si aplica"></textarea>
-            </label>
 
             <input type="hidden" name="tipos_muestra" id="tipos_muestra" />
             <input type="hidden" name="recipientes" id="recipientes" />
