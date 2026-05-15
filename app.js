@@ -1029,7 +1029,7 @@ async function guardarYVerHojaActual() {
     return;
   }
 
-  await verHojaTrazabilidadPorFolio(registroActual.folio);
+  abrirHojaTrazabilidadConRegistro(registroActual);
 }
 
 async function cerrarFolio() {
@@ -1351,8 +1351,13 @@ async function verHojaTrazabilidadPorFolio(folio) {
   const modalContinuar = document.getElementById("modalContinuar");
   const continuarAbierto = modalContinuar && !modalContinuar.classList.contains("hidden");
 
-  if (continuarAbierto && registroActual && registroActual.folio === folio && !avanceEnProceso) {
-    await guardarAvance(true);
+  if (continuarAbierto && registroActual && registroActual.folio === folio) {
+    const guardado = await guardarAvance(true);
+
+    if (guardado) {
+      abrirHojaTrazabilidadConRegistro(registroActual);
+      return;
+    }
   }
 
   const modal = document.getElementById("modalHojaTrazabilidad");
@@ -1372,7 +1377,15 @@ async function verHojaTrazabilidadPorFolio(folio) {
     return;
   }
 
-  contenedor.innerHTML = renderHojaTrazabilidad(data);
+  abrirHojaTrazabilidadConRegistro(data);
+}
+
+function abrirHojaTrazabilidadConRegistro(reg) {
+  const modal = document.getElementById("modalHojaTrazabilidad");
+  const contenedor = document.getElementById("contenidoHojaTrazabilidad");
+
+  modal.classList.remove("hidden");
+  contenedor.innerHTML = renderHojaTrazabilidad(reg);
 }
 
 function cerrarHojaTrazabilidad() {
