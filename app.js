@@ -2,6 +2,7 @@ const SUPABASE_URL = "https://kqbetryygymtsyhsowxj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QRC-82FH-YC2znJDSicb3Q_u82tcaHP";
 
 let supabaseClient;
+let registroActual = null;
 
 const selected = {
   enfermedades: [],
@@ -12,6 +13,8 @@ const selected = {
 
 window.addEventListener("DOMContentLoaded", () => {
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  crearModalContinuar();
 
   document.querySelectorAll(".menu-card").forEach(button => {
     button.addEventListener("click", () => showView(button.dataset.view));
@@ -88,25 +91,10 @@ function toggleChip(btn) {
 }
 
 function manejarCajasOtros() {
-  document.getElementById("enfermedadOtrosBox").classList.toggle(
-    "hidden",
-    !selected.enfermedades.includes("Otros")
-  );
-
-  document.getElementById("detallesOtrosBox").classList.toggle(
-    "hidden",
-    !selected.detalles_adicionales.includes("Otros")
-  );
-
-  document.getElementById("muestraOtrosBox").classList.toggle(
-    "hidden",
-    !selected.tipos_muestra.includes("Otros")
-  );
-
-  document.getElementById("recipienteOtrosBox").classList.toggle(
-    "hidden",
-    !selected.recipientes.includes("Otros")
-  );
+  document.getElementById("enfermedadOtrosBox").classList.toggle("hidden", !selected.enfermedades.includes("Otros"));
+  document.getElementById("detallesOtrosBox").classList.toggle("hidden", !selected.detalles_adicionales.includes("Otros"));
+  document.getElementById("muestraOtrosBox").classList.toggle("hidden", !selected.tipos_muestra.includes("Otros"));
+  document.getElementById("recipienteOtrosBox").classList.toggle("hidden", !selected.recipientes.includes("Otros"));
 
   renderCentrifugacion();
 }
@@ -233,6 +221,7 @@ async function guardarRegistro(e) {
 
   data.centrifugacion = obtenerCentrifugacion();
   data.estado = "ABIERTO";
+  data.updated_at = new Date().toISOString();
 
   delete data.origen_otros;
   delete data.enfermedad_otros;
@@ -245,7 +234,7 @@ async function guardarRegistro(e) {
 
   const { error } = await supabaseClient
     .from("trazabilidad")
-    .insert([data]);
+    .upsert([data], { onConflict: "folio" });
 
   if (error) {
     mensaje.textContent = "Error al guardar: " + error.message;
@@ -253,9 +242,13 @@ async function guardarRegistro(e) {
     return;
   }
 
-  mensaje.textContent = "Registro guardado correctamente.";
+  mensaje.innerHTML = `
+    Registro guardado correctamente.
+    <br>
+    <button type="button" onclick="copiarFolio('${data.folio}')">Copiar folio</button>
+    <button type="button" onclick="abrirContinuarPorFolio('${data.folio}')">Continuar trazabilidad</button>
+  `;
   mensaje.style.color = "green";
-  limpiarFormulario();
 }
 
 function limpiarFormulario() {
@@ -321,6 +314,279 @@ async function buscarRegistro() {
       <p><b>Recipientes:</b> ${(reg.recipientes || []).join(", ")}</p>
       <p><b>Estado:</b> ${reg.estado || ""}</p>
       <p><b>Creado:</b> ${reg.created_at ? new Date(reg.created_at).toLocaleString() : ""}</p>
+
+      <div class="hero-actions">
+        <button type="button" onclick="copiarFolio('${reg.folio}')">Copiar folio</button>
+        <button type="button" onclick="abrirContinuarPorFolio('${reg.folio}')">Continuar trazabilidad</button>
+      </div>
     </div>
   `).join("");
+}
+
+async function copiarFolio(folio) {
+  await navigator.clipboard.writeText(folio);
+  alert("Folio copiado: " + folio);
+}
+
+async function abrirContinuarPorFolio(folio) {
+  const { data, error } = await supabaseClient
+    .from("trazabilidad")
+    .select("*")
+    .eq("folio", folio)
+    .single();
+
+  if (error || !data) {
+    alert("No se encontró el folio.");
+    return;
+  }
+
+  registroActual = data;
+  cargarModalContinuar(data);
+}
+
+function crearModalContinuar() {
+  const modal = document.createElement("div");
+  modal.id = "modalContinuar";
+  modal.className = "hidden";
+  modal.innerHTML = `
+    <div class="modal-bg">
+      <div class="modal-box">
+        <div class="form-head">
+          <div>
+            <span class="pill" id="continuarPill">Continuar trazabilidad</span>
+            <h2>Continuar trazabilidad</h2>
+          </div>
+          <button type="button" class="secondary" onclick="cerrarModalContinuar()">Cerrar</button>
+        </div>
+
+        <p id="mensajeContinuar" class="save-status">Borrador cargado</p>
+
+        <div class="section-card">
+          <h3>INGRESO A CONTROL</h3>
+
+          <div class="grid-2">
+            <label>Hora ingreso a control
+              <input id="horaIngresoControl" type="time" />
+            </label>
+
+            <label>Responsable ingreso
+              <input id="responsableIngreso" placeholder="Nombre del responsable" />
+            </label>
+          </div>
+
+          <h4>¿Amerita centrifugación?</h4>
+          <div id="tablaControl" class="centrifuga-box"></div>
+        </div>
+
+        <div class="section-card">
+          <h3>ENTREGA AL ÁREA</h3>
+
+          <label>Responsable entrega
+            <input id="responsableEntrega" placeholder="Nombre del responsable" />
+          </label>
+
+          <div id="tablaEntrega" class="centrifuga-box"></div>
+        </div>
+
+        <div class="section-card">
+          <h3>OBSERVACIONES FINALES</h3>
+          <textarea id="observacionesFinales" rows="4" placeholder="Escribe observaciones finales si aplica"></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="secondary" onclick="cerrarModalContinuar()">Cerrar ventana</button>
+          <button type="button" onclick="guardarAvance()">Guardar avance</button>
+          <button type="button" class="danger-btn" onclick="cerrarFolio()">Cerrar folio</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+function cargarModalContinuar(reg) {
+  document.getElementById("modalContinuar").classList.remove("hidden");
+  document.getElementById("continuarPill").textContent = "Continuar • Folio: " + reg.folio;
+
+  document.getElementById("horaIngresoControl").value = reg.hora_ingreso_control || "";
+  document.getElementById("responsableIngreso").value = reg.responsable_ingreso || "";
+  document.getElementById("responsableEntrega").value = reg.responsable_entrega || "";
+  document.getElementById("observacionesFinales").value = reg.observaciones_finales || "";
+
+  renderTablaControl(reg);
+  renderTablaEntrega(reg);
+}
+
+function cerrarModalContinuar() {
+  document.getElementById("modalContinuar").classList.add("hidden");
+}
+
+function renderTablaControl(reg) {
+  const recipientes = reg.recipientes || [];
+  const guardado = reg.centrifugacion_control || [];
+  const box = document.getElementById("tablaControl");
+
+  if (recipientes.length === 0) {
+    box.innerHTML = "Este folio no tiene recipientes registrados.";
+    return;
+  }
+
+  box.innerHTML = `
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Recipiente</th>
+          <th>¿Centrifuga?</th>
+          <th>Ingreso</th>
+          <th>Salida</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${recipientes.map((rec, index) => {
+          const item = guardado.find(x => x.recipiente === rec) || {};
+          return `
+            <tr>
+              <td>${rec}</td>
+              <td>
+                <select data-control="${index}" data-field="centrifuga">
+                  <option value="">--</option>
+                  <option ${item.centrifuga === "SI" ? "selected" : ""}>SI</option>
+                  <option ${item.centrifuga === "NO" ? "selected" : ""}>NO</option>
+                  <option ${item.centrifuga === "NO APLICA" ? "selected" : ""}>NO APLICA</option>
+                </select>
+              </td>
+              <td><input type="time" data-control="${index}" data-field="ingreso" value="${item.ingreso || ""}" /></td>
+              <td><input type="time" data-control="${index}" data-field="salida" value="${item.salida || ""}" /></td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderTablaEntrega(reg) {
+  const recipientes = reg.recipientes || [];
+  const guardado = reg.entrega_area || [];
+  const box = document.getElementById("tablaEntrega");
+
+  if (recipientes.length === 0) {
+    box.innerHTML = "Este folio no tiene recipientes registrados.";
+    return;
+  }
+
+  box.innerHTML = `
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Recipiente</th>
+          <th>Área destino</th>
+          <th>Hora entrega</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${recipientes.map((rec, index) => {
+          const item = guardado.find(x => x.recipiente === rec) || {};
+          return `
+            <tr>
+              <td>${rec}</td>
+              <td>
+                <select data-entrega="${index}" data-field="area">
+                  <option value="">-- Selecciona --</option>
+                  <option ${item.area === "BIOQUÍMICA" ? "selected" : ""}>BIOQUÍMICA</option>
+                  <option ${item.area === "HEMATOLOGÍA" ? "selected" : ""}>HEMATOLOGÍA</option>
+                  <option ${item.area === "COAGULOMETRÍA" ? "selected" : ""}>COAGULOMETRÍA</option>
+                  <option ${item.area === "INMUNOLOGÍA" ? "selected" : ""}>INMUNOLOGÍA</option>
+                  <option ${item.area === "MICROBIOLOGÍA" ? "selected" : ""}>MICROBIOLOGÍA</option>
+                </select>
+              </td>
+              <td><input type="time" data-entrega="${index}" data-field="hora" value="${item.hora || ""}" /></td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function obtenerControl() {
+  const recipientes = registroActual.recipientes || [];
+
+  return recipientes.map((rec, index) => {
+    const campos = document.querySelectorAll(`[data-control="${index}"]`);
+    const item = { recipiente: rec };
+
+    campos.forEach(campo => {
+      item[campo.dataset.field] = campo.value || null;
+    });
+
+    return item;
+  });
+}
+
+function obtenerEntrega() {
+  const recipientes = registroActual.recipientes || [];
+
+  return recipientes.map((rec, index) => {
+    const campos = document.querySelectorAll(`[data-entrega="${index}"]`);
+    const item = { recipiente: rec };
+
+    campos.forEach(campo => {
+      item[campo.dataset.field] = campo.value || null;
+    });
+
+    return item;
+  });
+}
+
+async function guardarAvance() {
+  if (!registroActual) return;
+
+  const payload = {
+    hora_ingreso_control: document.getElementById("horaIngresoControl").value || null,
+    responsable_ingreso: document.getElementById("responsableIngreso").value || null,
+    responsable_entrega: document.getElementById("responsableEntrega").value || null,
+    centrifugacion_control: obtenerControl(),
+    entrega_area: obtenerEntrega(),
+    observaciones_finales: document.getElementById("observacionesFinales").value || null,
+    estado: "EN PROCESO",
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabaseClient
+    .from("trazabilidad")
+    .update(payload)
+    .eq("folio", registroActual.folio);
+
+  if (error) {
+    document.getElementById("mensajeContinuar").textContent = "Error al guardar avance: " + error.message;
+    document.getElementById("mensajeContinuar").style.color = "crimson";
+    return;
+  }
+
+  document.getElementById("mensajeContinuar").textContent = "Avance guardado correctamente.";
+  document.getElementById("mensajeContinuar").style.color = "green";
+}
+
+async function cerrarFolio() {
+  if (!registroActual) return;
+
+  await guardarAvance();
+
+  const { error } = await supabaseClient
+    .from("trazabilidad")
+    .update({
+      estado: "CERRADO",
+      updated_at: new Date().toISOString()
+    })
+    .eq("folio", registroActual.folio);
+
+  if (error) {
+    alert("Error al cerrar folio: " + error.message);
+    return;
+  }
+
+  alert("Folio cerrado correctamente.");
+  cerrarModalContinuar();
 }
