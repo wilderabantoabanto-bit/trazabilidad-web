@@ -644,6 +644,7 @@ function crearModalContinuar() {
         <div class="actions sticky-actions">
           <button type="button" class="secondary" onclick="cerrarModalContinuar()">Cerrar ventana</button>
           <button type="button" onclick="guardarAvance()">Guardar avance</button>
+          <button type="button" onclick="guardarYVerHojaActual()">Ver hoja / PDF</button>
           <button type="button" class="danger-btn" onclick="cerrarFolio()">Cerrar folio</button>
         </div>
       </div>
@@ -985,6 +986,19 @@ async function guardarAvance(silencioso = false) {
   return true;
 }
 
+async function guardarYVerHojaActual() {
+  if (!registroActual) return;
+
+  const guardado = await guardarAvance(false);
+
+  if (!guardado) {
+    alert("No se pudo generar la hoja porque el avance no se guardó correctamente.");
+    return;
+  }
+
+  await verHojaTrazabilidadPorFolio(registroActual.folio);
+}
+
 async function cerrarFolio() {
   if (!registroActual) return;
 
@@ -1042,6 +1056,13 @@ function crearModalHojaTrazabilidad() {
 }
 
 async function verHojaTrazabilidadPorFolio(folio) {
+  const modalContinuar = document.getElementById("modalContinuar");
+  const continuarAbierto = modalContinuar && !modalContinuar.classList.contains("hidden");
+
+  if (continuarAbierto && registroActual && registroActual.folio === folio && !avanceEnProceso) {
+    await guardarAvance(true);
+  }
+
   const modal = document.getElementById("modalHojaTrazabilidad");
   const contenedor = document.getElementById("contenidoHojaTrazabilidad");
 
