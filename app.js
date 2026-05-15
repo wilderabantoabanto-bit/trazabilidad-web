@@ -34,6 +34,8 @@ window.addEventListener("DOMContentLoaded", () => {
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   crearModalContinuar();
+  crearModalHojaTrazabilidad();
+  instalarEstilosHojaTrazabilidad();
 
   document.querySelectorAll(".menu-card").forEach(button => {
     button.addEventListener("click", () => showView(button.dataset.view));
@@ -449,6 +451,7 @@ async function guardarRegistro(e) {
       <div class="mini-actions">
         <button type="button" onclick="copiarFolio('${limpiarAtributo(data.folio)}')">Copiar folio</button>
         <button type="button" onclick="abrirContinuarPorFolio('${limpiarAtributo(data.folio)}')">Continuar trazabilidad</button>
+        <button type="button" onclick="verHojaTrazabilidadPorFolio('${limpiarAtributo(data.folio)}')">Ver hoja completa / PDF</button>
         <button type="button" class="secondary" onclick="limpiarFormulario()">Nuevo registro</button>
       </div>
     </div>
@@ -529,15 +532,16 @@ async function buscarRegistro() {
         <p><b>Requiere ficha:</b> ${limpiarHTML(reg.requiere_ficha || "")}</p>
         <p><b>Responsable:</b> ${limpiarHTML(reg.responsable || "")}</p>
         <p><b>Sede:</b> ${limpiarHTML(reg.sede || "")}</p>
-        <p><b>Muestras:</b> ${limpiarHTML((reg.tipos_muestra || []).join(", "))}</p>
-        <p><b>Recipientes:</b> ${limpiarHTML((reg.recipientes || []).join(", "))}</p>
-        <p><b>Creado:</b> ${reg.created_at ? new Date(reg.created_at).toLocaleString("es-PE") : ""}</p>
-        <p><b>Última actualización:</b> ${reg.updated_at ? new Date(reg.updated_at).toLocaleString("es-PE") : ""}</p>
+        <p><b>Muestras:</b> ${limpiarHTML(listaTexto(reg.tipos_muestra))}</p>
+        <p><b>Recipientes:</b> ${limpiarHTML(listaTexto(reg.recipientes))}</p>
+        <p><b>Creado:</b> ${formatearFecha(reg.created_at)}</p>
+        <p><b>Última actualización:</b> ${formatearFecha(reg.updated_at)}</p>
       </div>
 
       <div class="hero-actions">
         <button type="button" onclick="copiarFolio('${limpiarAtributo(reg.folio || "")}')">Copiar folio</button>
         <button type="button" onclick="abrirContinuarPorFolio('${limpiarAtributo(reg.folio || "")}')">Continuar trazabilidad</button>
+        <button type="button" onclick="verHojaTrazabilidadPorFolio('${limpiarAtributo(reg.folio || "")}')">Ver hoja completa / PDF</button>
       </div>
     </div>
   `).join("");
@@ -651,7 +655,6 @@ function crearModalContinuar() {
 
     if (chip) {
       chip.classList.toggle("selected");
-      manejarAreaOtrosEntrega(chip.dataset.entrega);
       programarAutoGuardadoAvance();
     }
   });
@@ -840,15 +843,6 @@ function renderTablaEntrega(reg) {
                     >${limpiarHTML(area)}</button>
                   `).join("")}
                 </div>
-
-                <div class="area-otros-box ${areasGuardadas.includes("OTROS") ? "" : "hidden"}" id="areaOtrosBox_${index}">
-                  <input
-                    data-entrega="${index}"
-                    data-field="area_otros"
-                    placeholder="Especifica otra área..."
-                    value="${limpiarAtributo(item.area_otros || "")}"
-                  />
-                </div>
               </td>
               <td>
                 <input type="time" data-entrega="${index}" data-field="hora" value="${limpiarAtributo(item.hora || "")}" />
@@ -880,15 +874,6 @@ function obtenerAreasGuardadas(item) {
   return [];
 }
 
-function manejarAreaOtrosEntrega(index) {
-  const chipOtros = document.querySelector(`.area-chip[data-entrega="${index}"][data-area="OTROS"]`);
-  const boxOtros = document.getElementById(`areaOtrosBox_${index}`);
-
-  if (!chipOtros || !boxOtros) return;
-
-  boxOtros.classList.toggle("hidden", !chipOtros.classList.contains("selected"));
-}
-
 function sincronizarResponsableEntrega() {
   const responsableGeneral = document.getElementById("responsableEntrega").value || "";
 
@@ -917,23 +902,15 @@ function obtenerEntrega() {
 
   return recipientes.map((rec, index) => {
     const chipsSeleccionados = document.querySelectorAll(`.area-chip[data-entrega="${index}"].selected`);
-    const areaOtrosInput = document.querySelector(`[data-entrega="${index}"][data-field="area_otros"]`);
     const horaInput = document.querySelector(`[data-entrega="${index}"][data-field="hora"]`);
     const responsableInput = document.querySelector(`[data-entrega="${index}"][data-field="responsable"]`);
 
-    let areas = Array.from(chipsSeleccionados).map(chip => chip.dataset.area);
-
-    const areaOtros = areaOtrosInput ? areaOtrosInput.value.trim() : "";
-    if (areas.includes("OTROS") && areaOtros) {
-      areas = areas.filter(area => area !== "OTROS");
-      areas.push(areaOtros);
-    }
+    const areas = Array.from(chipsSeleccionados).map(chip => chip.dataset.area);
 
     return {
       recipiente: rec,
       areas: areas,
       area: areas.join(", "),
-      area_otros: areaOtros || null,
       hora: horaInput?.value || null,
       responsable: responsableInput?.value || null
     };
@@ -1037,6 +1014,478 @@ async function cerrarFolio() {
   cerrarModalContinuar();
 }
 
+function crearModalHojaTrazabilidad() {
+  const modal = document.createElement("div");
+  modal.id = "modalHojaTrazabilidad";
+  modal.className = "hidden";
+  modal.innerHTML = `
+    <div class="modal-bg">
+      <div class="modal-box hoja-modal-box">
+        <div class="form-head no-print">
+          <div>
+            <span class="pill">Hoja completa</span>
+            <h2>Hoja de trazabilidad</h2>
+          </div>
+
+          <div class="hero-actions">
+            <button type="button" onclick="imprimirHojaTrazabilidad()">Imprimir / Guardar PDF</button>
+            <button type="button" class="secondary" onclick="cerrarHojaTrazabilidad()">Cerrar</button>
+          </div>
+        </div>
+
+        <div id="contenidoHojaTrazabilidad" class="hoja-print"></div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function verHojaTrazabilidadPorFolio(folio) {
+  const modal = document.getElementById("modalHojaTrazabilidad");
+  const contenedor = document.getElementById("contenidoHojaTrazabilidad");
+
+  modal.classList.remove("hidden");
+  contenedor.innerHTML = `<p class="hoja-loading">Cargando hoja de trazabilidad...</p>`;
+
+  const { data, error } = await supabaseClient
+    .from("trazabilidad")
+    .select("*")
+    .eq("folio", folio)
+    .single();
+
+  if (error || !data) {
+    contenedor.innerHTML = `<div class="errorbox">No se pudo cargar la hoja del folio.</div>`;
+    return;
+  }
+
+  contenedor.innerHTML = renderHojaTrazabilidad(data);
+}
+
+function cerrarHojaTrazabilidad() {
+  document.getElementById("modalHojaTrazabilidad").classList.add("hidden");
+}
+
+function imprimirHojaTrazabilidad() {
+  window.print();
+}
+
+function renderHojaTrazabilidad(reg) {
+  const centrifugacionInicial = Array.isArray(reg.centrifugacion) ? reg.centrifugacion : [];
+  const centrifugacionControl = Array.isArray(reg.centrifugacion_control) ? reg.centrifugacion_control : [];
+  const entregaArea = Array.isArray(reg.entrega_area) ? reg.entrega_area : [];
+
+  return `
+    <article class="hoja-documento">
+      <header class="hoja-header">
+        <div>
+          <h1>HOJA DE TRAZABILIDAD DE MUESTRA</h1>
+          <p>Sistema interno de registro, búsqueda y seguimiento de muestras</p>
+        </div>
+        <div class="hoja-estado ${claseEstado(reg.estado)}">${limpiarHTML(reg.estado || "SIN ESTADO")}</div>
+      </header>
+
+      <section class="hoja-resumen">
+        <div>
+          <span>Folio</span>
+          <strong>${limpiarHTML(reg.folio || "-")}</strong>
+        </div>
+        <div>
+          <span>Sede</span>
+          <strong>${limpiarHTML(reg.sede || "-")}</strong>
+        </div>
+        <div>
+          <span>Responsable inicial</span>
+          <strong>${limpiarHTML(reg.responsable || "-")}</strong>
+        </div>
+        <div>
+          <span>Fecha de registro</span>
+          <strong>${formatearFecha(reg.created_at)}</strong>
+        </div>
+        <div>
+          <span>Última actualización</span>
+          <strong>${formatearFecha(reg.updated_at)}</strong>
+        </div>
+      </section>
+
+      <section class="hoja-section">
+        <h2>1. Ficha preanalítica / clasificación inicial</h2>
+        <div class="hoja-grid">
+          ${itemHoja("Origen del registro", reg.origen_registro)}
+          ${itemHoja("Requiere ficha preanalítica", reg.requiere_ficha)}
+          ${itemHoja("Cumplió indicaciones", reg.indicaciones_respuesta)}
+          ${itemHoja("Detalle indicaciones", reg.indicaciones_detalle)}
+          ${itemHoja("Motivo del análisis", reg.motivo_respuesta)}
+          ${itemHoja("Detalle motivo", reg.motivo_detalle)}
+          ${itemHoja("Enfermedad crónica", reg.enfermedad_cronica)}
+          ${itemHoja("Enfermedades", listaTexto(reg.enfermedades))}
+          ${itemHoja("Medicamentos", reg.medicamentos)}
+          ${itemHoja("Detalle medicamentos", reg.medicamentos_detalle)}
+          ${itemHoja("Detalles adicionales", listaTexto(reg.detalles_adicionales))}
+          ${itemHoja("Otros detalles", reg.detalles_otros)}
+        </div>
+      </section>
+
+      <section class="hoja-section">
+        <h2>2. Datos de trazabilidad inicial</h2>
+        <div class="hoja-grid">
+          ${itemHoja("Hora de toma", reg.hora_centrifugacion)}
+          ${itemHoja("Tipo de muestra", listaTexto(reg.tipos_muestra))}
+          ${itemHoja("Recipientes", listaTexto(reg.recipientes))}
+        </div>
+
+        <h3>Centrifugación inicial</h3>
+        ${tablaHoja(
+          ["Recipiente", "Requiere centrifugación", "Hora"],
+          centrifugacionInicial.map(item => [
+            item.recipiente,
+            item.requiere_centrifugacion,
+            item.hora
+          ])
+        )}
+      </section>
+
+      <section class="hoja-section">
+        <h2>3. Ingreso a control / centrifugación</h2>
+        <div class="hoja-grid">
+          ${itemHoja("Hora ingreso a control", reg.hora_ingreso_control)}
+          ${itemHoja("Responsable ingreso", reg.responsable_ingreso)}
+        </div>
+
+        <h3>Amerita centrifugación</h3>
+        ${tablaHoja(
+          ["Recipiente", "¿Centrifuga?", "Ingreso", "Salida"],
+          centrifugacionControl.map(item => [
+            item.recipiente,
+            item.centrifuga,
+            item.ingreso,
+            item.salida
+          ])
+        )}
+      </section>
+
+      <section class="hoja-section">
+        <h2>4. Entrega al área</h2>
+        <div class="hoja-grid">
+          ${itemHoja("Responsable entrega general", reg.responsable_entrega)}
+        </div>
+
+        ${tablaHoja(
+          ["Recipiente", "Área destino", "Hora entrega", "Responsable"],
+          entregaArea.map(item => [
+            item.recipiente,
+            item.areas ? item.areas.join(", ") : item.area,
+            item.hora,
+            item.responsable || reg.responsable_entrega
+          ])
+        )}
+      </section>
+
+      <section class="hoja-section">
+        <h2>5. Observaciones finales</h2>
+        <div class="hoja-observaciones">
+          ${limpiarHTML(reg.observaciones_finales || "Sin observaciones registradas.")}
+        </div>
+      </section>
+
+      <footer class="hoja-footer">
+        <div>
+          <strong>Folio:</strong> ${limpiarHTML(reg.folio || "-")}
+        </div>
+        <div>
+          Documento generado desde el sistema web de trazabilidad.
+        </div>
+      </footer>
+    </article>
+  `;
+}
+
+function itemHoja(titulo, valor) {
+  return `
+    <div class="hoja-item">
+      <span>${limpiarHTML(titulo)}</span>
+      <strong>${limpiarHTML(valor || "-")}</strong>
+    </div>
+  `;
+}
+
+function tablaHoja(headers, rows) {
+  const filasValidas = rows.filter(row => row.some(valor => valor));
+
+  if (filasValidas.length === 0) {
+    return `<p class="hoja-vacio">Sin datos registrados.</p>`;
+  }
+
+  return `
+    <div class="hoja-table-wrap">
+      <table class="hoja-table">
+        <thead>
+          <tr>
+            ${headers.map(header => `<th>${limpiarHTML(header)}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${filasValidas.map(row => `
+            <tr>
+              ${row.map(valor => `<td>${limpiarHTML(valor || "-")}</td>`).join("")}
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function instalarEstilosHojaTrazabilidad() {
+  if (document.getElementById("estilosHojaTrazabilidad")) return;
+
+  const style = document.createElement("style");
+  style.id = "estilosHojaTrazabilidad";
+  style.textContent = `
+    .hoja-modal-box{
+      width:min(1200px,100%);
+    }
+
+    .hoja-loading{
+      padding:24px;
+      font-weight:700;
+      color:#64748b;
+    }
+
+    .hoja-documento{
+      background:#fff;
+      border:1px solid #dbe3ef;
+      border-radius:22px;
+      padding:28px;
+      color:#172033;
+    }
+
+    .hoja-header{
+      display:flex;
+      justify-content:space-between;
+      gap:18px;
+      align-items:flex-start;
+      border-bottom:3px solid #2f6fed;
+      padding-bottom:18px;
+      margin-bottom:20px;
+    }
+
+    .hoja-header h1{
+      margin:0;
+      font-size:28px;
+      letter-spacing:-.5px;
+    }
+
+    .hoja-header p{
+      margin:8px 0 0;
+      color:#64748b;
+    }
+
+    .hoja-estado{
+      padding:10px 16px;
+      border-radius:999px;
+      font-weight:800;
+      white-space:nowrap;
+      background:#f1f5f9;
+      color:#334155;
+    }
+
+    .hoja-estado.open{
+      background:#e8f8ef;
+      color:#17804b;
+    }
+
+    .hoja-estado.process{
+      background:#fff7db;
+      color:#9a6400;
+    }
+
+    .hoja-estado.closed{
+      background:#e8eef8;
+      color:#334155;
+    }
+
+    .hoja-resumen{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+      gap:12px;
+      margin-bottom:20px;
+    }
+
+    .hoja-resumen div,
+    .hoja-item{
+      border:1px solid #dbe3ef;
+      background:#f8fbff;
+      border-radius:14px;
+      padding:12px;
+    }
+
+    .hoja-resumen span,
+    .hoja-item span{
+      display:block;
+      font-size:12px;
+      text-transform:uppercase;
+      color:#64748b;
+      font-weight:800;
+      letter-spacing:.4px;
+      margin-bottom:5px;
+    }
+
+    .hoja-resumen strong,
+    .hoja-item strong{
+      font-size:15px;
+      color:#172033;
+      word-break:break-word;
+    }
+
+    .hoja-section{
+      border:1px solid #dbe3ef;
+      border-radius:18px;
+      padding:18px;
+      margin-top:16px;
+      page-break-inside:avoid;
+    }
+
+    .hoja-section h2{
+      margin:0 0 14px;
+      color:#214ccf;
+      font-size:20px;
+    }
+
+    .hoja-section h3{
+      margin:18px 0 10px;
+      font-size:16px;
+      color:#334155;
+    }
+
+    .hoja-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:10px;
+    }
+
+    .hoja-table-wrap{
+      overflow:auto;
+      border:1px solid #dbe3ef;
+      border-radius:14px;
+    }
+
+    .hoja-table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:650px;
+    }
+
+    .hoja-table th{
+      background:#eef3fb;
+      color:#334155;
+      text-align:left;
+      padding:10px;
+      font-size:13px;
+    }
+
+    .hoja-table td{
+      padding:10px;
+      border-top:1px solid #e5edf7;
+      font-size:14px;
+    }
+
+    .hoja-vacio{
+      background:#f8fafc;
+      border:1px dashed #cbd5e1;
+      border-radius:14px;
+      padding:12px;
+      color:#64748b;
+      font-weight:700;
+    }
+
+    .hoja-observaciones{
+      background:#f8fafc;
+      border:1px solid #dbe3ef;
+      border-radius:14px;
+      padding:14px;
+      min-height:70px;
+      white-space:pre-wrap;
+    }
+
+    .hoja-footer{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      border-top:1px solid #dbe3ef;
+      margin-top:20px;
+      padding-top:14px;
+      color:#64748b;
+      font-size:13px;
+    }
+
+    @media(max-width:768px){
+      .hoja-header,
+      .hoja-footer{
+        flex-direction:column;
+      }
+
+      .hoja-documento{
+        padding:18px;
+      }
+    }
+
+    @media print{
+      body *{
+        visibility:hidden !important;
+      }
+
+      #modalHojaTrazabilidad,
+      #modalHojaTrazabilidad *{
+        visibility:visible !important;
+      }
+
+      #modalHojaTrazabilidad{
+        position:absolute !important;
+        inset:0 !important;
+        background:#fff !important;
+      }
+
+      #modalHojaTrazabilidad .modal-bg{
+        position:static !important;
+        background:#fff !important;
+        padding:0 !important;
+        display:block !important;
+      }
+
+      #modalHojaTrazabilidad .modal-box{
+        width:100% !important;
+        max-height:none !important;
+        overflow:visible !important;
+        box-shadow:none !important;
+        border-radius:0 !important;
+        padding:0 !important;
+      }
+
+      .no-print{
+        display:none !important;
+      }
+
+      .hoja-documento{
+        border:none !important;
+        border-radius:0 !important;
+        padding:0 !important;
+        box-shadow:none !important;
+      }
+
+      .hoja-section{
+        page-break-inside:avoid;
+      }
+
+      .hoja-table{
+        min-width:0 !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
 function claseEstado(estado) {
   const limpio = (estado || "").toUpperCase();
 
@@ -1045,6 +1494,30 @@ function claseEstado(estado) {
   if (limpio === "ABIERTO") return "open";
 
   return "unknown";
+}
+
+function formatearFecha(valor) {
+  if (!valor) return "-";
+
+  try {
+    return new Date(valor).toLocaleString("es-PE");
+  } catch (error) {
+    return valor;
+  }
+}
+
+function listaTexto(valor) {
+  if (!valor) return "-";
+
+  if (Array.isArray(valor)) {
+    return valor.length ? valor.join(", ") : "-";
+  }
+
+  if (typeof valor === "object") {
+    return JSON.stringify(valor);
+  }
+
+  return valor;
 }
 
 function limpiarHTML(valor) {
