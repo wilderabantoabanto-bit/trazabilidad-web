@@ -30,6 +30,15 @@ window.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("[data-chip]").forEach(btn => {
     btn.addEventListener("click", () => toggleChip(btn));
   });
+
+  document.querySelector('[name="tipo_muestra_otros"]')?.addEventListener("input", () => {
+    actualizarOcultos();
+  });
+
+  document.querySelector('[name="recipiente_otros"]')?.addEventListener("input", () => {
+    actualizarOcultos();
+    renderCentrifugacion();
+  });
 });
 
 function showView(viewId) {
