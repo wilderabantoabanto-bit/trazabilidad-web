@@ -35,7 +35,6 @@ window.addEventListener("DOMContentLoaded", () => {
 function showView(viewId) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.querySelectorAll(".menu-card").forEach(b => b.classList.remove("active"));
-
   document.getElementById(viewId).classList.add("active");
 
   const btn = document.querySelector(`[data-view="${viewId}"]`);
@@ -99,19 +98,51 @@ function manejarCajasOtros() {
     "hidden",
     !selected.recipientes.includes("Otros")
   );
+
+  renderCentrifugacion();
+}
+
+function valorInput(name) {
+  const input = document.querySelector(`[name="${name}"]`);
+  return input ? input.value.trim() : "";
+}
+
+function getTiposMuestraFinales() {
+  const muestraOtros = valorInput("tipo_muestra_otros");
+  let lista = [...selected.tipos_muestra];
+
+  if (muestraOtros) {
+    lista = lista.filter(x => x !== "Otros");
+    lista.push(muestraOtros);
+  }
+
+  return lista;
+}
+
+function getRecipientesFinales() {
+  const recipienteOtros = valorInput("recipiente_otros");
+  let lista = [...selected.recipientes];
+
+  if (recipienteOtros) {
+    lista = lista.filter(x => x !== "Otros");
+    lista.push(recipienteOtros);
+  }
+
+  return lista;
 }
 
 function actualizarOcultos() {
-  document.getElementById("tipos_muestra").value = JSON.stringify(selected.tipos_muestra);
-  document.getElementById("recipientes").value = JSON.stringify(selected.recipientes);
+  document.getElementById("tipos_muestra").value = JSON.stringify(getTiposMuestraFinales());
+  document.getElementById("recipientes").value = JSON.stringify(getRecipientesFinales());
   document.getElementById("enfermedades").value = JSON.stringify(selected.enfermedades);
   document.getElementById("detalles_adicionales").value = JSON.stringify(selected.detalles_adicionales);
 }
 
 function renderCentrifugacion() {
   const box = document.getElementById("tablaCentrifugacion");
+  const recipientesFinales = getRecipientesFinales();
 
-  if (selected.recipientes.length === 0) {
+  if (recipientesFinales.length === 0) {
     box.innerHTML = "Selecciona recipientes arriba para generar la tabla.";
     return;
   }
@@ -126,7 +157,7 @@ function renderCentrifugacion() {
         </tr>
       </thead>
       <tbody>
-        ${selected.recipientes.map((rec, index) => `
+        ${recipientesFinales.map((rec, index) => `
           <tr>
             <td>${rec}</td>
             <td>
@@ -148,7 +179,9 @@ function renderCentrifugacion() {
 }
 
 function obtenerCentrifugacion() {
-  return selected.recipientes.map((rec, index) => {
+  const recipientesFinales = getRecipientesFinales();
+
+  return recipientesFinales.map((rec, index) => {
     const campos = document.querySelectorAll(`[data-centri="${index}"]`);
     const item = { recipiente: rec };
 
@@ -158,11 +191,6 @@ function obtenerCentrifugacion() {
 
     return item;
   });
-}
-
-function valorInput(name) {
-  const input = document.querySelector(`[name="${name}"]`);
-  return input ? input.value.trim() : "";
 }
 
 async function guardarRegistro(e) {
@@ -179,21 +207,20 @@ async function guardarRegistro(e) {
 
   const origenOtros = valorInput("origen_otros");
   const enfermedadOtros = valorInput("enfermedad_otros");
-  const muestraOtros = valorInput("tipo_muestra_otros");
-  const recipienteOtros = valorInput("recipiente_otros");
 
   if (data.origen_registro === "OTROS" && origenOtros) {
     data.origen_registro = "OTROS: " + origenOtros;
   }
 
-  data.tipos_muestra = [...selected.tipos_muestra];
-  data.recipientes = [...selected.recipientes];
+  data.tipos_muestra = getTiposMuestraFinales();
+  data.recipientes = getRecipientesFinales();
   data.enfermedades = [...selected.enfermedades];
   data.detalles_adicionales = [...selected.detalles_adicionales];
 
-  if (muestraOtros) data.tipos_muestra.push("OTROS: " + muestraOtros);
-  if (recipienteOtros) data.recipientes.push("OTROS: " + recipienteOtros);
-  if (enfermedadOtros) data.enfermedades.push("OTROS: " + enfermedadOtros);
+  if (enfermedadOtros) {
+    data.enfermedades = data.enfermedades.filter(x => x !== "Otros");
+    data.enfermedades.push(enfermedadOtros);
+  }
 
   data.centrifugacion = obtenerCentrifugacion();
   data.estado = "ABIERTO";
